@@ -35,28 +35,15 @@ target_link_libraries(test-cv PRIVATE opencv_highgui opencv_kinect)
 add_executable(calibration src/calibrate-qt.cpp src/calibrate-qt-main.cpp)
 target_link_libraries(calibration PRIVATE Qt6::Gui Qt6::Widgets opencv_kinect)
 
-add_executable(object_detection_server 
-    src/object_detection_server.cpp
-    src/object_detector.cpp
-    src/udp_json_server.cpp
-)
+add_executable(simple_server src/simple_server.cpp)
+add_executable(simple_client src/simple_client.cpp)
 
-target_link_libraries(object_detection_server PRIVATE 
-    opencv_kinect
-    opencv_highgui
-    ${CMAKE_THREAD_LIBS_INIT}
-)
-
-# Find and link pthread
-find_package(Threads REQUIRED)
-target_link_libraries(object_detection_server PRIVATE Threads::Threads)
+# Link threading for both
+target_link_libraries(simple_server PRIVATE Threads::Threads)
+target_link_libraries(simple_client PRIVATE Threads::Threads)
 
 # Platform-specific networking libraries
 if(WIN32)
-    target_link_libraries(object_detection_server PRIVATE ws2_32)
+    target_link_libraries(simple_server PRIVATE ws2_32)
+    target_link_libraries(simple_client PRIVATE ws2_32)
 endif()
-
-# Set include directories for the new executable
-target_include_directories(object_detection_server PRIVATE src)
-
-add_executable(test_client ./test_client.cpp)

@@ -4,8 +4,6 @@
 #include <thread>
 #include <atomic>
 #include <csignal>
-#include <string.h>
-#include <iomanip>
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -16,11 +14,12 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <cstring>
 #endif
 
-class UDPTestClient {
+class SimpleUDPClient {
 public:
-    UDPTestClient(const std::string& server_ip = "127.0.0.1", int server_port = 8888)
+    SimpleUDPClient(const std::string& server_ip = "127.0.0.1", int server_port = 8888)
         : server_ip_(server_ip), server_port_(server_port), socket_fd_(-1) {
 #ifdef _WIN32
         WSADATA wsaData;
@@ -28,7 +27,7 @@ public:
 #endif
     }
     
-    ~UDPTestClient() {
+    ~SimpleUDPClient() {
         disconnect();
 #ifdef _WIN32
         WSACleanup();
@@ -49,7 +48,7 @@ public:
         server_addr_.sin_port = htons(server_port_);
         
         if (inet_aton(server_ip_.c_str(), &server_addr_.sin_addr) == 0) {
-            std::cerr << "Invalid server IP address: " << server_ip_ << std::endl;
+            std::cerr << "Invalid server IP: " << server_ip_ << std::endl;
             return false;
         }
         
@@ -59,18 +58,18 @@ public:
                                    reinterpret_cast<sockaddr*>(&server_addr_), sizeof(server_addr_));
         
         if (bytes_sent < 0) {
-            std::cerr << "Failed to send subscription message" << std::endl;
+            std::cerr << "Failed to send subscription" << std::endl;
             return false;
         }
         
-        // Set socket timeout for receiving
+        // Set receive timeout
         struct timeval timeout;
         timeout.tv_sec = 1;
         timeout.tv_usec = 0;
         setsockopt(socket_fd_, SOL_SOCKET, SO_RCVTIMEO, 
                   reinterpret_cast<const char*>(&timeout), sizeof(timeout));
         
-        std::cout << "Connected to server " << server_ip_ << ":" << server_port_ << std::endl;
+        std::cout << "Connected to " << server_ip_ << ":" << server_port_ << std::endl;
         return true;
     }
     
@@ -90,11 +89,11 @@ public:
         sockaddr_in sender_addr;
         socklen_t addr_len = sizeof(sender_addr);
         
-        size_t message_count = 0;
+        int message_count = 0;
         auto start_time = std::chrono::steady_clock::now();
         
         std::cout << "Listening for object detection data..." << std::endl;
-        std::cout << "Press Ctrl+C to stop" << std::endl;
+        std::cout << "Press Ctrl+C to stop\n" << std::endl;
         
         while (running_) {
             ssize_t bytes_received = recvfrom(socket_fd_, buffer, sizeof(buffer) - 1, 0,
@@ -106,20 +105,26 @@ public:
                 
                 message_count++;
                 
-                // Parse and display the JSON message
-                std::cout << "\n--- Message #" << message_count << " ---" << std::endl;
-                std::cout << message << std::endl;
-                
-                // Calculate message rate
-                auto now = std::chrono::steady_clock::now();
-                auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start_time);
-                if (elapsed.count() > 0) {
-                    double rate = static_cast<double>(message_count) / elapsed.count();
-                    std::cout << "Message rate: " << std::fixed << std::setprecision(1) << rate << " msg/s" << std::endl;
+                // Pretty print every 10th message to avoid spam
+                if (message_count % 10 == 1) {
+                    std::cout << "--- Message #" << message_count << " ---" << std::endl;
+                    std::cout << message << std::endl;
+                    
+                    // Calculate message rate
+                    auto now = std::chrono::steady_clock::now();
+                    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start_time);
+                    if (elapsed.count() > 0) {
+                        double rate = static_cast<double>(message_count) / elapsed.count();
+                        std::cout << "Rate: " << rate << " msg/s\n" << std::endl;
+                    }
+                } else {
+                    // Just show a dot for other messages
+                    std::cout << "." << std::flush;
+                    if (message_count % 50 == 0) std::cout << std::endl;
                 }
-            } else if (bytes_received == 0) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
+            
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
         
         std::cout << "\nReceived " << message_count << " messages total" << std::endl;
@@ -137,8 +142,8 @@ private:
     std::atomic<bool> running_{true};
 };
 
-// Global client instance for signal handling
-std::unique_ptr<UDPTestClient> g_client;
+// Global client for signal handling
+std::unique_ptr<SimpleUDPClient> g_client;
 
 void signalHandler(int signal) {
     std::cout << "\nShutdown signal received" << std::endl;
@@ -148,42 +153,32 @@ void signalHandler(int signal) {
 }
 
 int main(int argc, char* argv[]) {
+    signal(SIGINT, signalHandler);
+    signal(SIGTERM, signalHandler);
+    
     std::string server_ip = "127.0.0.1";
     int server_port = 8888;
     
-    // Parse command line arguments
     if (argc > 1) {
         server_ip = argv[1];
     }
     if (argc > 2) {
-        try {
-            server_port = std::stoi(argv[2]);
-        } catch (const std::exception& e) {
-            std::cerr << "Invalid port number: " << argv[2] << std::endl;
-            return 1;
-        }
+        server_port = std::atoi(argv[2]);
     }
     
-    // Set up signal handling
-    signal(SIGINT, signalHandler);
-    signal(SIGTERM, signalHandler);
-    
-    std::cout << "UDP Object Detection Test Client" << std::endl;
+    std::cout << "Simple UDP Test Client" << std::endl;
     std::cout << "Connecting to: " << server_ip << ":" << server_port << std::endl;
     
-    g_client = std::make_unique<UDPTestClient>(server_ip, server_port);
+    g_client = std::make_unique<SimpleUDPClient>(server_ip, server_port);
     
     if (!g_client->connect()) {
         std::cerr << "Failed to connect to server" << std::endl;
         return 1;
     }
     
-    // Listen for messages
     g_client->listenForMessages();
     
-    g_client->disconnect();
     g_client.reset();
-    
     std::cout << "Client shutdown complete" << std::endl;
     return 0;
 }
