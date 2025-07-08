@@ -54,21 +54,57 @@ public:
             return {hands, objects};
         }
         
+        // DEBUG: Log frame info periodically
+        static int debug_frame_count = 0;
+        debug_frame_count++;
+        bool debug_this_frame = (debug_frame_count % 120 == 1);  // Every 4 seconds
+        
+        if (debug_this_frame) {
+            std::cout << "[DETECTOR] Processing frame - RGB: " << rgb.size() 
+                      << " Depth: " << depth.size() << std::endl;
+        }
+        
         // Ensure correct formats
         if (rgb.channels() != 3 || depth.type() != CV_16UC1) {
-            std::cerr << "Warning: Unexpected frame format" << std::endl;
+            if (debug_this_frame) {
+                std::cout << "[DETECTOR] Warning: Unexpected frame format - RGB channels: " 
+                          << rgb.channels() << " Depth type: " << depth.type() << std::endl;
+            }
             return {hands, objects};
         }
         
         try {
-            // Detect hands using skin color + depth
-            hands = detectHands(rgb, depth);
+            // Check if this is real data or dummy data
+            cv::Scalar rgb_mean = cv::mean(rgb);
+            cv::Scalar depth_mean = cv::mean(depth);
+            bool is_real_data = (rgb_mean[0] > 1 || rgb_mean[1] > 1 || rgb_mean[2] > 1 || depth_mean[0] > 1);
             
-            // Detect objects using depth thresholding
-            objects = detectTableObjects(depth);
+            if (debug_this_frame) {
+                std::cout << "[DETECTOR] RGB mean: (" << rgb_mean[0] << "," << rgb_mean[1] << "," << rgb_mean[2] 
+                          << ") Depth mean: " << depth_mean[0] << " Real data: " << is_real_data << std::endl;
+            }
+            
+            if (!is_real_data) {
+                // This is dummy data (all zeros) - return empty results
+                if (debug_this_frame) {
+                    std::cout << "[DETECTOR] Dummy data detected - returning empty results" << std::endl;
+                }
+                return {hands, objects};
+            }
+            
+            // Detect hands using skin color + depth
+            hands = detectHands(rgb, depth, debug_this_frame);
+            
+            // Detect objects using depth thresholding  
+            objects = detectTableObjects(depth, debug_this_frame);
+            
+            if (debug_this_frame) {
+                std::cout << "[DETECTOR] Detection complete - " << hands.size() 
+                          << " hands, " << objects.size() << " objects" << std::endl;
+            }
             
         } catch (const std::exception& e) {
-            std::cerr << "Detection error: " << e.what() << std::endl;
+            std::cerr << "[DETECTOR] Detection error: " << e.what() << std::endl;
         }
         
         return {hands, objects};
@@ -76,18 +112,27 @@ public:
 
 private:
     
-    std::vector<SimpleDetectedObject> detectHands(const cv::Mat& rgb, const cv::Mat& depth) {
+    std::vector<SimpleDetectedObject> detectHands(const cv::Mat& rgb, const cv::Mat& depth, bool debug = false) {
         std::vector<SimpleDetectedObject> hands;
         
         // Step 1: Create skin color mask
-        cv::Mat skin_mask = createSkinMask(rgb);
+        cv::Mat skin_mask = createSkinMask(rgb, debug);
         
         // Step 2: Create depth mask for hand range
-        cv::Mat depth_mask = createDepthMask(depth, hand_min_depth_, hand_max_depth_);
+        cv::Mat depth_mask = createDepthMask(depth, hand_min_depth_, hand_max_depth_, debug);
         
         // Step 3: Combine masks (skin AND depth)
         cv::Mat combined_mask;
         cv::bitwise_and(skin_mask, depth_mask, combined_mask);
+        
+        if (debug) {
+            int skin_pixels = cv::countNonZero(skin_mask);
+            int depth_pixels = cv::countNonZero(depth_mask);
+            int combined_pixels = cv::countNonZero(combined_mask);
+            std::cout << "[HANDS] Skin pixels: " << skin_pixels 
+                      << " Depth pixels: " << depth_pixels 
+                      << " Combined: " << combined_pixels << std::endl;
+        }
         
         // Step 4: Clean up mask with morphological operations
         cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5));
@@ -98,9 +143,19 @@ private:
         std::vector<std::vector<cv::Point>> contours;
         cv::findContours(combined_mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
         
+        if (debug) {
+            std::cout << "[HANDS] Found " << contours.size() << " contours" << std::endl;
+        }
+        
         // Step 6: Filter and extract hand positions
-        for (const auto& contour : contours) {
+        for (size_t i = 0; i < contours.size(); ++i) {
+            const auto& contour = contours[i];
             double area = cv::contourArea(contour);
+            
+            if (debug && area > min_hand_area_ / 2) {  // Log larger contours
+                std::cout << "[HANDS] Contour " << i << " area: " << area 
+                          << " (range: " << min_hand_area_ << "-" << max_hand_area_ << ")" << std::endl;
+            }
             
             if (area >= min_hand_area_ && area <= max_hand_area_) {
                 // Calculate centroid
@@ -114,6 +169,12 @@ private:
                     if (world_pos.z > 0) {  // Valid depth
                         float confidence = calculateConfidence(area, min_hand_area_, max_hand_area_);
                         hands.emplace_back(world_pos.x, world_pos.y, world_pos.z, "hand", confidence);
+                        
+                        if (debug) {
+                            std::cout << "[HANDS] Hand detected at pixel (" << cx << "," << cy 
+                                      << ") world (" << world_pos.x << "," << world_pos.y << "," << world_pos.z 
+                                      << ") conf=" << confidence << std::endl;
+                        }
                     }
                 }
             }
@@ -122,11 +183,16 @@ private:
         return hands;
     }
     
-    std::vector<SimpleDetectedObject> detectTableObjects(const cv::Mat& depth) {
+    std::vector<SimpleDetectedObject> detectTableObjects(const cv::Mat& depth, bool debug = false) {
         std::vector<SimpleDetectedObject> objects;
         
         // Step 1: Create depth mask for table/object range  
-        cv::Mat depth_mask = createDepthMask(depth, object_min_depth_, object_max_depth_);
+        cv::Mat depth_mask = createDepthMask(depth, object_min_depth_, object_max_depth_, debug);
+        
+        if (debug) {
+            int depth_pixels = cv::countNonZero(depth_mask);
+            std::cout << "[OBJECTS] Depth pixels in range: " << depth_pixels << std::endl;
+        }
         
         // Step 2: Clean up mask (remove noise, fill holes)
         cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(7, 7));
@@ -137,9 +203,19 @@ private:
         std::vector<std::vector<cv::Point>> contours;
         cv::findContours(depth_mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
         
+        if (debug) {
+            std::cout << "[OBJECTS] Found " << contours.size() << " contours" << std::endl;
+        }
+        
         // Step 4: Filter and extract object positions
-        for (const auto& contour : contours) {
+        for (size_t i = 0; i < contours.size(); ++i) {
+            const auto& contour = contours[i];
             double area = cv::contourArea(contour);
+            
+            if (debug && area > min_object_area_ / 2) {  // Log larger contours
+                std::cout << "[OBJECTS] Contour " << i << " area: " << area 
+                          << " (min: " << min_object_area_ << ")" << std::endl;
+            }
             
             if (area >= min_object_area_) {
                 // Calculate centroid
@@ -153,6 +229,12 @@ private:
                     if (world_pos.z > 0) {  // Valid depth
                         float confidence = calculateConfidence(area, min_object_area_, min_object_area_ * 5);
                         objects.emplace_back(world_pos.x, world_pos.y, world_pos.z, "object", confidence);
+                        
+                        if (debug) {
+                            std::cout << "[OBJECTS] Object detected at pixel (" << cx << "," << cy 
+                                      << ") world (" << world_pos.x << "," << world_pos.y << "," << world_pos.z 
+                                      << ") conf=" << confidence << std::endl;
+                        }
                     }
                 }
             }
@@ -161,30 +243,84 @@ private:
         return objects;
     }
     
-    cv::Mat createSkinMask(const cv::Mat& rgb) {
+    cv::Mat createSkinMask(const cv::Mat& rgb, bool debug = false) {
         cv::Mat hsv, mask;
-        cv::cvtColor(rgb, hsv, cv::COLOR_RGB2HSV);
         
-        // Primary skin color range
+        // Try RGB first (what we expect from Kinect)
+        cv::cvtColor(rgb, hsv, cv::COLOR_RGB2HSV);
         cv::inRange(hsv, lower_skin_hsv_, upper_skin_hsv_, mask);
         
-        // Additional range for different lighting (from existing code)
+        // Additional range for different lighting
         cv::Mat mask2;
         cv::inRange(hsv, cv::Scalar(160, 48, 80), cv::Scalar(180, 255, 255), mask2);
         cv::bitwise_or(mask, mask2, mask);
         
+        int skin_pixels_rgb = cv::countNonZero(mask);
+        
+        // If RGB doesn't work well, try BGR (fallback)
+        if (skin_pixels_rgb < 100) {  // Very few skin pixels found
+            cv::Mat hsv_bgr, mask_bgr;
+            cv::cvtColor(rgb, hsv_bgr, cv::COLOR_BGR2HSV);
+            cv::inRange(hsv_bgr, lower_skin_hsv_, upper_skin_hsv_, mask_bgr);
+            
+            cv::Mat mask2_bgr;
+            cv::inRange(hsv_bgr, cv::Scalar(160, 48, 80), cv::Scalar(180, 255, 255), mask2_bgr);
+            cv::bitwise_or(mask_bgr, mask2_bgr, mask_bgr);
+            
+            int skin_pixels_bgr = cv::countNonZero(mask_bgr);
+            
+            if (debug) {
+                std::cout << "[SKIN] RGB mode: " << skin_pixels_rgb << " pixels, BGR mode: " << skin_pixels_bgr << " pixels";
+            }
+            
+            // Use BGR if it gives significantly more skin pixels
+            if (skin_pixels_bgr > skin_pixels_rgb * 2) {
+                mask = mask_bgr;
+                if (debug) {
+                    std::cout << " -> Using BGR";
+                }
+            } else if (debug) {
+                std::cout << " -> Using RGB";
+            }
+            
+            if (debug) {
+                std::cout << std::endl;
+            }
+        }
+        
+        if (debug) {
+            cv::Scalar rgb_mean = cv::mean(rgb);
+            int final_skin_pixels = cv::countNonZero(mask);
+            std::cout << "[SKIN] RGB mean: (" << rgb_mean[0] << "," << rgb_mean[1] << "," << rgb_mean[2] 
+                      << ") Final skin pixels: " << final_skin_pixels << std::endl;
+        }
+        
         return mask;
     }
     
-    cv::Mat createDepthMask(const cv::Mat& depth, float min_depth_mm, float max_depth_mm) {
+    cv::Mat createDepthMask(const cv::Mat& depth, float min_depth_mm, float max_depth_mm, bool debug = false) {
         cv::Mat mask = cv::Mat::zeros(depth.size(), CV_8UC1);
+        
+        int valid_pixels = 0;
+        int range_pixels = 0;
         
         depth.forEach<uint16_t>([&](uint16_t& pixel, const int position[2]) {
             float depth_mm = static_cast<float>(pixel);
-            if (isValidDepth(depth_mm) && depth_mm >= min_depth_mm && depth_mm <= max_depth_mm) {
-                mask.at<uint8_t>(position[0], position[1]) = 255;
+            if (isValidDepth(depth_mm)) {
+                valid_pixels++;
+                if (depth_mm >= min_depth_mm && depth_mm <= max_depth_mm) {
+                    mask.at<uint8_t>(position[0], position[1]) = 255;
+                    range_pixels++;
+                }
             }
         });
+        
+        if (debug) {
+            cv::Scalar depth_mean = cv::mean(depth);
+            std::cout << "[DEPTH] Mean: " << depth_mean[0] << "mm Range: " << min_depth_mm 
+                      << "-" << max_depth_mm << "mm Valid: " << valid_pixels 
+                      << " InRange: " << range_pixels << std::endl;
+        }
         
         return mask;
     }
