@@ -9,8 +9,11 @@
 #include <mutex>
 #include <iomanip>
 
-// Add Kinect integration and detection
-#include "capture-cv.hpp"
+// Direct freenect integration (like glview.c)
+#include <libfreenect/libfreenect.h>
+#include <opencv2/core.hpp>
+
+// Detection
 #include "simple_detector.hpp"
 
 #ifdef _WIN32
@@ -25,6 +28,7 @@
 #include <cstring>
 #endif
 
+
 struct SimpleDetectionResult {
     std::vector<SimpleDetectedObject> hands;
     std::vector<SimpleDetectedObject> objects;
@@ -35,11 +39,8 @@ struct SimpleDetectionResult {
 
 class SimpleUDPServer {
 public:
-    SimpleUDPServer(int port = 8888, uint32_t sync_threshold_ms = 50) : port_(port), socket_fd_(-1), 
-                                       capture_(nullptr),
-                                       frame_sync_threshold_ms_(sync_threshold_ms),  // Back to strict sync
-                                       kinect_mode_(false),
-                                       detector_() {  // Initialize detector
+    SimpleUDPServer(int port = 8888) : port_(port), socket_fd_(-1), 
+                                       kinect_mode_(false), detector_() {
 #ifdef _WIN32
         WSADATA wsaData;
         WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -61,13 +62,11 @@ public:
             return false;
         }
         
-        // Try to start Kinect - if it fails, use dummy mode
-        if (tryStartKinect()) {
+        // Try to start Kinect with glview.c architecture
+        if (initKinectGlviewStyle()) {
             kinect_mode_ = true;
-            std::cout << "🟢 KINECT MODE: Real sensor data" << std::endl;
-            
-            // Start dedicated Kinect polling thread (inspired by QCalibrationApp)
-            startKinectPolling();
+            std::cout << "🟢 KINECT MODE: glview.c architecture" << std::endl;
+            startKinectThread();
         } else {
             kinect_mode_ = false;
             std::cout << "🟡 DUMMY MODE: Simulated sensor data (no Kinect detected)" << std::endl;
@@ -81,18 +80,16 @@ public:
     
     void stop() {
         running_ = false;
+        die_ = true;
         
-        // Stop Kinect polling thread
-        if (kinect_polling_thread_.joinable()) {
-            kinect_polling_thread_.join();
+        // Stop Kinect thread
+        if (kinect_thread_.joinable()) {
+            kinect_thread_.join();
         }
         
-        if (kinect_mode_ && capture_) {
-            try {
-                capture_->stop();
-            } catch (const std::exception& e) {
-                std::cerr << "Error stopping Kinect: " << e.what() << std::endl;
-            }
+        // Cleanup Kinect (like glview.c)
+        if (kinect_mode_) {
+            cleanupKinect();
         }
         
         if (socket_fd_ >= 0) {
@@ -110,10 +107,9 @@ public:
         sockaddr_in client_addr;
         socklen_t addr_len = sizeof(client_addr);
         
-        // Set receive timeout to make it non-blocking
         struct timeval timeout;
         timeout.tv_sec = 0;
-        timeout.tv_usec = 10000; // 10ms
+        timeout.tv_usec = 50000; // 50ms
         setsockopt(socket_fd_, SOL_SOCKET, SO_RCVTIMEO, 
                    reinterpret_cast<const char*>(&timeout), sizeof(timeout));
         
@@ -122,9 +118,8 @@ public:
         auto last_dummy_time = std::chrono::steady_clock::now();
         
         while (running_) {
-            // Handle dummy mode timing (Kinect mode handled by separate thread)
+            // Handle dummy mode timing
             if (!kinect_mode_) {
-                // Dummy mode: generate frames at ~30fps
                 auto now = std::chrono::steady_clock::now();
                 auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_dummy_time);
                 
@@ -134,7 +129,7 @@ public:
                 }
             }
             
-            // Check for new client subscriptions
+            // Check for client subscriptions
             ssize_t bytes_received = recvfrom(socket_fd_, buffer, sizeof(buffer) - 1, 0,
                                              reinterpret_cast<sockaddr*>(&client_addr), &addr_len);
             
@@ -158,10 +153,84 @@ public:
                 }
             }
             
-            // Small sleep to prevent CPU spinning
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));  // Less frequent than Kinect polling
+            // std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     }
+
+    // ========== FREENECT CALLBACKS (glview.c style) - PUBLIC ==========
+    
+    static void depth_cb(freenect_device *dev, void *v_depth, uint32_t timestamp) {
+        if (!instance_) return;
+        
+        uint16_t *depth = (uint16_t*)v_depth;
+        
+        std::lock_guard<std::mutex> lock(instance_->gl_backbuf_mutex_);
+        
+        // Simple copy for now (glview.c does color mapping here)
+        memcpy(instance_->depth_mid_, depth, 640*480*sizeof(uint16_t));
+        instance_->got_depth_ = true;
+        
+        // Process frame pair if both available
+        instance_->processFramePair();
+    }
+    
+    static void rgb_cb(freenect_device *dev, void *rgb, uint32_t timestamp) {
+        if (!instance_) return;
+        
+        std::lock_guard<std::mutex> lock(instance_->gl_backbuf_mutex_);
+        
+        // Buffer swapping exactly like glview.c
+        uint8_t *temp = instance_->rgb_back_;
+        instance_->rgb_back_ = instance_->rgb_mid_;
+        freenect_set_video_buffer(dev, instance_->rgb_back_);  // ← CRITICAL: Reset buffer
+        instance_->rgb_mid_ = (uint8_t*)rgb;
+        
+        instance_->got_rgb_ = true;
+        
+        // Process frame pair if both available
+        instance_->processFramePair();
+    }
+    
+    void processFramePair() {
+        if (!got_rgb_ || !got_depth_) return;
+        
+        // Generate our own timestamp
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - kinect_start_time_);
+        uint32_t our_timestamp = static_cast<uint32_t>(elapsed.count());
+        
+        // Create OpenCV matrices from raw buffers
+        cv::Mat rgb_mat(480, 640, CV_8UC3, rgb_mid_);
+        cv::Mat depth_mat(480, 640, CV_16UC1, depth_mid_);
+        
+        // Clone to avoid buffer issues
+        cv::Mat rgb_clone = rgb_mat.clone();
+        cv::Mat depth_clone = depth_mat.clone();
+        
+        // Process with detection
+        SimpleDetectionResult result = processFrames(rgb_clone, depth_clone, our_timestamp);
+        
+        // Broadcast to client
+        if (has_client_) {
+            broadcastDetectionResult(result);
+        }
+        
+        // Reset flags
+        got_rgb_ = false;
+        got_depth_ = false;
+        
+        // Debug
+        static int frame_count = 0;
+        frame_count++;
+        if (frame_count % 30 == 0) {
+            std::cout << "[GLVIEW] Frame pair #" << frame_count 
+                      << " - " << result.hands.size() << " hands, " 
+                      << result.objects.size() << " objects" << std::endl;
+        }
+    }
+    
+    // Static instance for callbacks (PUBLIC)
+    static SimpleUDPServer* instance_;
 
 private:
     bool startUDPServer() {
@@ -189,402 +258,174 @@ private:
         return true;
     }
     
-    bool tryStartKinect() {
+    // ========== KINECT INTEGRATION (glview.c style) ==========
+    
+    bool initKinectGlviewStyle() {
         try {
-            std::cout << "Attempting to connect to Kinect..." << std::endl;
+            std::cout << "Initializing Kinect with glview.c architecture..." << std::endl;
             
-            // Create capture instance
-            capture_ = std::make_unique<CVKinectCapture>(CVKinectCapture::MEDIUM, CVKinectCapture::MEDIUM);
+            // Initialize freenect context (like glview.c main())
+            if (freenect_init(&f_ctx_, NULL) < 0) {
+                std::cout << "freenect_init() failed" << std::endl;
+                return false;
+            }
             
-            // Setup callbacks
-            setupKinectCallbacks();
+            freenect_set_log_level(f_ctx_, FREENECT_LOG_DEBUG);
+            freenect_select_subdevices(f_ctx_, (freenect_device_flags)(FREENECT_DEVICE_MOTOR | FREENECT_DEVICE_CAMERA));
             
-            // Try to start
-            capture_->start();
+            int nr_devices = freenect_num_devices(f_ctx_);
+            std::cout << "Number of devices found: " << nr_devices << std::endl;
             
-            std::cout << "Kinect connected successfully!" << std::endl;
+            if (nr_devices < 1) {
+                freenect_shutdown(f_ctx_);
+                return false;
+            }
+            
+            // Open device (like glview.c)
+            if (freenect_open_device(f_ctx_, &f_dev_, 0) < 0) {
+                std::cout << "Could not open device" << std::endl;
+                freenect_shutdown(f_ctx_);
+                return false;
+            }
+            
+            // Allocate buffers (CRITICAL - like glview.c)
+            allocateBuffers();
+            
+            // Set video modes (like glview.c)
+            freenect_set_video_mode(f_dev_, freenect_find_video_mode(FREENECT_RESOLUTION_MEDIUM, FREENECT_VIDEO_RGB));
+            freenect_set_depth_mode(f_dev_, freenect_find_depth_mode(FREENECT_RESOLUTION_MEDIUM, FREENECT_DEPTH_11BIT));
+            
+            // Set callbacks (like glview.c)
+            freenect_set_video_callback(f_dev_, rgb_cb);
+            freenect_set_depth_callback(f_dev_, depth_cb);
+            
+            // CRITICAL: Set video buffer (like glview.c)
+            freenect_set_video_buffer(f_dev_, rgb_back_);
+            
+            // Start streams (like glview.c)
+            if (freenect_start_depth(f_dev_) < 0) {
+                std::cout << "Failed to start depth stream" << std::endl;
+                return false;
+            }
+            
+            if (freenect_start_video(f_dev_) < 0) {
+                std::cout << "Failed to start video stream" << std::endl;
+                return false;
+            }
+            
+            kinect_start_time_ = std::chrono::steady_clock::now();
+            std::cout << "Kinect initialized successfully (glview.c style)" << std::endl;
             return true;
             
         } catch (const std::exception& e) {
-            std::cout << "Kinect not available: " << e.what() << std::endl;
-            capture_.reset();
+            std::cout << "Kinect initialization failed: " << e.what() << std::endl;
             return false;
         }
     }
     
-    void startKinectPolling() {
-        // Start dedicated Kinect polling thread (now matching glview.c architecture)
-        kinect_polling_thread_ = std::thread([this]() {
-            std::cout << "🔄 Starting Kinect polling thread (glview.c style - tight loop)" << std::endl;
+    void allocateBuffers() {
+        // Allocate buffers exactly like glview.c
+        depth_mid_ = (uint16_t*)malloc(640*480*sizeof(uint16_t));
+        depth_front_ = (uint16_t*)malloc(640*480*sizeof(uint16_t));
+        rgb_back_ = (uint8_t*)malloc(640*480*3);
+        rgb_mid_ = (uint8_t*)malloc(640*480*3);
+        rgb_front_ = (uint8_t*)malloc(640*480*3);
+        
+        std::cout << "Buffers allocated (glview.c style)" << std::endl;
+    }
+    
+    void startKinectThread() {
+        // Start freenect thread exactly like glview.c freenect_threadfunc
+        kinect_thread_ = std::thread([this]() {
+            std::cout << "🔄 Starting Kinect thread (glview.c freenect_threadfunc style)" << std::endl;
             
-            while (running_ && kinect_mode_) {
-                try {
-                    // Match glview.c: tight loop with no sleep, just like freenect_threadfunc
-                    int result = 0;
-                    for (int i = 0; i < 10 && running_; ++i) {  // Process multiple events per iteration
-                        capture_->next_loop_event();
-                    }
-                    
-                    // Very short sleep (much less than 10ms) to prevent 100% CPU
-                    std::this_thread::sleep_for(std::chrono::microseconds(500));  // 0.5ms instead of 10ms
-                    
-                } catch (const std::exception& e) {
-                    std::cerr << "Kinect polling error: " << e.what() << std::endl;
-                    std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Back off on error
-                }
+            while (!die_ && freenect_process_events(f_ctx_) >= 0) {
+                // Tight loop like glview.c - NO sleep!
+                // This is the key difference from our previous approach
             }
             
-            std::cout << "🔄 Kinect polling thread stopped" << std::endl;
+            std::cout << "🔄 Kinect thread stopped" << std::endl;
         });
     }
     
-    void setupKinectCallbacks() {
-        if (!capture_) return;
+    void cleanupKinect() {
+        if (f_dev_) {
+            freenect_stop_depth(f_dev_);
+            freenect_stop_video(f_dev_);
+            freenect_close_device(f_dev_);
+        }
         
-        // Store server start time for consistent timestamping
-        kinect_start_time_ = std::chrono::steady_clock::now();
+        if (f_ctx_) {
+            freenect_shutdown(f_ctx_);
+        }
         
-        // RGB frame callback (using existing capture-cv.hpp pattern)
-        capture_->set_rgb_callback([this](cv::Mat& rgb, uint32_t kinect_timestamp) {
-            // Generate our own consistent timestamp
-            auto now = std::chrono::steady_clock::now();
-            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - kinect_start_time_);
-            uint32_t our_timestamp = static_cast<uint32_t>(elapsed.count());
-            
-            // Debug: Show timestamp comparison occasionally
-            static int debug_count = 0;
-            debug_count++;
-            if (debug_count % 60 == 1) {
-                std::cout << "[TIMESTAMP] RGB - Kinect: " << kinect_timestamp 
-                          << "ms, Ours: " << our_timestamp << "ms (diff: " 
-                          << std::abs(static_cast<int64_t>(kinect_timestamp) - static_cast<int64_t>(our_timestamp)) 
-                          << "ms)" << std::endl;
-            }
-            
-            onRGBFrame(rgb, our_timestamp);
-        });
+        // Free buffers
+        if (depth_mid_) free(depth_mid_);
+        if (depth_front_) free(depth_front_);
+        if (rgb_back_) free(rgb_back_);
+        if (rgb_mid_) free(rgb_mid_);
+        if (rgb_front_) free(rgb_front_);
         
-        // Depth frame callback
-        capture_->set_depth_callback([this](cv::Mat& depth, uint32_t kinect_timestamp) {
-            // Generate our own consistent timestamp  
-            auto now = std::chrono::steady_clock::now();
-            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - kinect_start_time_);
-            uint32_t our_timestamp = static_cast<uint32_t>(elapsed.count());
-            
-            // Debug: Show timestamp comparison occasionally
-            static int debug_count = 0;
-            debug_count++;
-            if (debug_count % 60 == 1) {
-                std::cout << "[TIMESTAMP] Depth - Kinect: " << kinect_timestamp 
-                          << "ms, Ours: " << our_timestamp << "ms (diff: " 
-                          << std::abs(static_cast<int64_t>(kinect_timestamp) - static_cast<int64_t>(our_timestamp)) 
-                          << "ms)" << std::endl;
-            }
-            
-            onDepthFrame(depth, our_timestamp);
-        });
+        std::cout << "Kinect cleanup complete" << std::endl;
     }
     
-    void setupDummyMode() {
-        std::cout << "Setting up dummy data generation..." << std::endl;
-        dummy_start_time_ = std::chrono::steady_clock::now();
-    }
+    // ========== FREENECT CALLBACKS (glview.c style) ==========
     
-    void generateDummyFrames() {
-        // Generate dummy RGB and depth frames with realistic timing
-        auto now = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - dummy_start_time_);
-        uint32_t timestamp = static_cast<uint32_t>(elapsed.count());
-        
-        // Create dummy RGB frame (empty for processing, we don't actually need the pixels)
-        cv::Mat dummy_rgb = cv::Mat::zeros(480, 640, CV_8UC3);
-        
-        // Create dummy depth frame (empty for processing, we don't actually need the pixels)
-        cv::Mat dummy_depth = cv::Mat::zeros(480, 640, CV_16UC1);
-        
-        // Process as if they were real frames
-        onRGBFrame(dummy_rgb, timestamp);
-        onDepthFrame(dummy_depth, timestamp + 2);  // Slight offset to test sync
-    }
-    
-    SimpleDetectionResult generateDummyDetections(uint32_t timestamp) {
+
+    SimpleDetectionResult processFrames(const cv::Mat& rgb, const cv::Mat& depth, uint32_t timestamp) {
         SimpleDetectionResult result(timestamp);
         
-        // Animated dummy data for development/testing
-        static int counter = 0;
-        counter++;
-        
-        // Dummy hand (simulate hand waving)
-        if (counter % 60 < 45) {  // Show hand ~75% of the time
-            result.hands.emplace_back(
-                0.2f + 0.3f * sin(counter * 0.08f),  // x: side to side
-                -0.1f + 0.15f * cos(counter * 0.06f), // y: up and down  
-                1.0f + 0.2f * sin(counter * 0.04f),  // z: forward/back
-                "hand",
-                0.6f + 0.2f * sin(counter * 0.1f)    // confidence: varies
-            );
-        }
-        
-        // Show second hand occasionally
-        if (counter % 80 < 30) {
-            result.hands.emplace_back(
-                -0.25f + 0.2f * cos(counter * 0.07f),
-                0.05f + 0.1f * sin(counter * 0.09f), 
-                1.1f + 0.15f * cos(counter * 0.05f),
-                "hand",
-                0.5f + 0.3f * cos(counter * 0.12f)
-            );
-        }
-        
-        // Dummy objects on table (more stable)
-        result.objects.emplace_back(
-            0.15f + 0.05f * sin(counter * 0.02f),  // slight movement
-            0.4f, 
-            0.9f, 
-            "object", 
-            0.7f
-        );
-        
-        result.objects.emplace_back(
-            -0.2f, 
-            0.5f + 0.03f * cos(counter * 0.015f), 
-            0.85f, 
-            "object", 
-            0.8f
-        );
-        
-        // Third object appears/disappears
-        if (counter % 100 < 70) {
-            result.objects.emplace_back(
-                0.05f, 
-                0.3f, 
-                0.95f + 0.02f * sin(counter * 0.03f), 
-                "object", 
-                0.6f
-            );
+        if (kinect_mode_) {
+            // Real detection on Kinect data
+            auto detection_result = detector_.detectObjects(rgb, depth);
+            result.hands = detection_result.first;
+            result.objects = detection_result.second;
+        } else {
+            // Dummy mode
+            result = generateDummyDetections(timestamp);
         }
         
         return result;
     }
     
-    void onRGBFrame(cv::Mat& rgb, uint32_t timestamp) {
-        // DEBUG: Are callbacks even being called?
-        static int rgb_callback_count = 0;
-        rgb_callback_count++;
+    // ========== DUMMY MODE ==========
+    
+    void setupDummyMode() {
+        dummy_start_time_ = std::chrono::steady_clock::now();
+    }
+    
+    void generateDummyFrames() {
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - dummy_start_time_);
+        uint32_t timestamp = static_cast<uint32_t>(elapsed.count());
         
-        if (rgb_callback_count % 30 == 1) {
-            std::cout << "[CALLBACK DEBUG] RGB callback #" << rgb_callback_count 
-                      << " - Size: " << rgb.size() << " Channels: " << rgb.channels() 
-                      << " Type: " << rgb.type() << " Empty: " << rgb.empty() << std::endl;
-                      
-            // Check if data looks valid
-            cv::Scalar mean = cv::mean(rgb);
-            std::cout << "[CALLBACK DEBUG] RGB mean: (" << mean[0] << "," << mean[1] << "," << mean[2] << ")" << std::endl;
-        }
+        SimpleDetectionResult result = generateDummyDetections(timestamp);
         
-        std::lock_guard<std::mutex> lock(frame_mutex_);
-        latest_rgb_ = rgb.clone();
-        latest_rgb_timestamp_ = timestamp;
-        checkAndProcessFrames();
-        
-        // Debug output (reduce spam)
-        if (rgb_frame_count_++ % 30 == 0) {
-            std::string mode = kinect_mode_ ? "[KINECT]" : "[DUMMY]";
-            std::cout << mode << " RGB frame " << rgb_frame_count_ << " at " << timestamp << std::endl;
+        if (has_client_) {
+            broadcastDetectionResult(result);
         }
     }
     
-    void onDepthFrame(cv::Mat& depth, uint32_t timestamp) {
-        // DEBUG: Are callbacks even being called?
-        static int depth_callback_count = 0;
-        depth_callback_count++;
-        
-        if (depth_callback_count % 30 == 1) {
-            std::cout << "[CALLBACK DEBUG] Depth callback #" << depth_callback_count 
-                      << " - Size: " << depth.size() << " Type: " << depth.type() 
-                      << " Empty: " << depth.empty() << std::endl;
-                      
-            // Check if data looks valid
-            cv::Scalar mean = cv::mean(depth);
-            uint16_t center_val = depth.empty() ? 0 : depth.at<uint16_t>(depth.rows/2, depth.cols/2);
-            std::cout << "[CALLBACK DEBUG] Depth mean: " << mean[0] << " Center: " << center_val << std::endl;
-        }
-        
-        std::lock_guard<std::mutex> lock(frame_mutex_);
-        latest_depth_ = depth.clone();
-        latest_depth_timestamp_ = timestamp;
-        checkAndProcessFrames();
-        
-        // Debug output (reduce spam)
-        if (depth_frame_count_++ % 30 == 0) {
-            std::string mode = kinect_mode_ ? "[KINECT]" : "[DUMMY]";
-            std::cout << mode << " Depth frame " << depth_frame_count_ << " at " << timestamp << std::endl;
-        }
-    }
-    
-    void checkAndProcessFrames() {
-        // Frame synchronization logic (from existing object_detection_server.cpp)
-        if (!latest_rgb_.empty() && !latest_depth_.empty()) {
-            uint32_t time_diff = std::abs(static_cast<int32_t>(latest_rgb_timestamp_ - latest_depth_timestamp_));
-            
-            // DEBUG: Detailed sync analysis
-            static int sync_attempts = 0;
-            static int sync_successes = 0;
-            static uint32_t max_time_diff = 0;
-            static uint32_t min_time_diff = UINT32_MAX;
-            static int consecutive_failures = 0;  // Track consecutive sync failures
-            
-            sync_attempts++;
-            max_time_diff = std::max(max_time_diff, time_diff);
-            min_time_diff = std::min(min_time_diff, time_diff);
-            
-            // Log sync details every 60 attempts
-            if (sync_attempts % 60 == 1) {
-                std::cout << "\n=== SYNC ANALYSIS ===" << std::endl;
-                std::cout << "RGB timestamp: " << latest_rgb_timestamp_ << std::endl;
-                std::cout << "Depth timestamp: " << latest_depth_timestamp_ << std::endl;
-                std::cout << "Time difference: " << time_diff << "ms" << std::endl;
-                std::cout << "Sync threshold: " << frame_sync_threshold_ms_ << "ms" << std::endl;
-                std::cout << "Success rate: " << sync_successes << "/" << sync_attempts 
-                          << " (" << (100.0f * sync_successes / sync_attempts) << "%)" << std::endl;
-                std::cout << "Time diff range: " << min_time_diff << "-" << max_time_diff << "ms" << std::endl;
-                
-                if (latest_rgb_timestamp_ > latest_depth_timestamp_) {
-                    std::cout << "RGB is " << (latest_rgb_timestamp_ - latest_depth_timestamp_) << "ms newer" << std::endl;
-                } else {
-                    std::cout << "Depth is " << (latest_depth_timestamp_ - latest_rgb_timestamp_) << "ms newer" << std::endl;
-                }
-                std::cout << "===================" << std::endl;
-                
-                // Auto-adjust sync threshold if success rate is too low
-                if (sync_attempts > 60 && sync_successes < sync_attempts / 4) {  // Less than 25% success
-                    frame_sync_threshold_ms_ = std::min(500U, max_time_diff + 50);  // Increase threshold
-                    std::cout << "🔧 AUTO-ADJUSTING sync threshold to " << frame_sync_threshold_ms_ << "ms" << std::endl;
-                }
-            }
-            
-            if (time_diff <= frame_sync_threshold_ms_) {
-                // Frames are synchronized! Process them.
-                sync_successes++;
-                consecutive_failures = 0;  // Reset failure counter
-                uint32_t sync_timestamp = std::max(latest_rgb_timestamp_, latest_depth_timestamp_);
-                
-                // Process frames
-                SimpleDetectionResult result = processFrames(latest_rgb_, latest_depth_, sync_timestamp);
-                
-                // Broadcast to client if connected
-                if (has_client_) {
-                    broadcastDetectionResult(result);
-                }
-                
-                // Clear processed frames
-                latest_rgb_ = cv::Mat();
-                latest_depth_ = cv::Mat();
-                
-                // Debug sync success (less frequent)
-                if (sync_count_++ % 30 == 0) {
-                    std::string mode = kinect_mode_ ? "[KINECT]" : "[DUMMY]";
-                    std::cout << mode << " ✅ Sync #" << sync_count_ 
-                              << " (diff: " << time_diff << "ms)" << std::endl;
-                }
-            } else {
-                // Frames out of sync - log more details
-                out_of_sync_count_++;
-                consecutive_failures++;
-                
-                if (out_of_sync_count_ % 30 == 1) {  // Every 30 failures
-                    std::cout << "❌ SYNC FAIL #" << out_of_sync_count_ 
-                              << ": " << time_diff << "ms > " << frame_sync_threshold_ms_ << "ms threshold" << std::endl;
-                    std::cout << "   RGB: " << latest_rgb_timestamp_ 
-                              << " Depth: " << latest_depth_timestamp_ << std::endl;
-                }
-                
-                // Discard the older frame to help sync
-                if (latest_rgb_timestamp_ < latest_depth_timestamp_) {
-                    latest_rgb_ = cv::Mat();  // Discard older RGB
-                    latest_rgb_timestamp_ = 0;
-                } else {
-                    latest_depth_ = cv::Mat();  // Discard older depth
-                    latest_depth_timestamp_ = 0;
-                }
-                
-                // FALLBACK: If we've failed sync many times, process anyway with warning
-                if (consecutive_failures > 100) {  // After 100 consecutive failures
-                    std::cout << "🚨 SYNC EMERGENCY: Processing unsynchronized frames!" << std::endl;
-                    
-                    // Process with the most recent available frame pair
-                    uint32_t emergency_timestamp = std::max(latest_rgb_timestamp_, latest_depth_timestamp_);
-                    SimpleDetectionResult result = processFrames(latest_rgb_, latest_depth_, emergency_timestamp);
-                    
-                    if (has_client_) {
-                        broadcastDetectionResult(result);
-                    }
-                    
-                    // Clear frames and reset counter
-                    latest_rgb_ = cv::Mat();
-                    latest_depth_ = cv::Mat();
-                    consecutive_failures = 0;
-                    
-                    // Increase threshold dramatically
-                    frame_sync_threshold_ms_ = 500;
-                    std::cout << "🔧 EMERGENCY: Sync threshold increased to " << frame_sync_threshold_ms_ << "ms" << std::endl;
-                }
-            }
-        }
-    }
-    
-    SimpleDetectionResult processFrames(const cv::Mat& rgb, const cv::Mat& depth, uint32_t timestamp) {
+    SimpleDetectionResult generateDummyDetections(uint32_t timestamp) {
         SimpleDetectionResult result(timestamp);
         
-        if (kinect_mode_) {
-            // KINECT MODE: Use real detection on real sensor data
-            
-            // DEBUG: Check frame properties
-            static int debug_count = 0;
-            debug_count++;
-            if (debug_count % 60 == 1) {  // Every 2 seconds
-                std::cout << "[DEBUG] RGB frame: " << rgb.size() << " channels=" << rgb.channels() 
-                          << " type=" << rgb.type() << std::endl;
-                std::cout << "[DEBUG] Depth frame: " << depth.size() << " type=" << depth.type() << std::endl;
-                
-                // Check some depth values
-                if (!depth.empty()) {
-                    cv::Scalar mean_depth = cv::mean(depth);
-                    uint16_t center_depth = depth.at<uint16_t>(depth.rows/2, depth.cols/2);
-                    std::cout << "[DEBUG] Depth - mean: " << mean_depth[0] << " center: " << center_depth << std::endl;
-                }
-            }
-            
-            try {
-                auto detection_result = detector_.detectObjects(rgb, depth);
-                result.hands = detection_result.first;
-                result.objects = detection_result.second;
-                
-                // DEBUG: Report detection attempts
-                if (debug_count % 60 == 1) {
-                    std::cout << "[DEBUG] Real detection returned: " << result.hands.size() 
-                              << " hands, " << result.objects.size() << " objects" << std::endl;
-                }
-                
-            } catch (const std::exception& e) {
-                std::cerr << "[ERROR] Detection failed: " << e.what() << std::endl;
-                // Fall back to dummy data if detection fails
-                result = generateDummyDetections(timestamp);
-            }
-        } else {
-            // DUMMY MODE: Generate animated dummy detections for testing
-            result = generateDummyDetections(timestamp);
+        static int counter = 0;
+        counter++;
+        
+        // Animated dummy hand
+        if (counter % 60 < 45) {
+            result.hands.emplace_back(
+                0.2f + 0.3f * sin(counter * 0.08f),
+                -0.1f + 0.15f * cos(counter * 0.06f), 
+                1.0f + 0.2f * sin(counter * 0.04f),
+                "hand",
+                0.6f + 0.2f * sin(counter * 0.1f)
+            );
         }
         
-        // Debug output every 30 frames
-        static int detection_count = 0;
-        detection_count++;
-        if (detection_count % 30 == 0) {
-            std::string mode = kinect_mode_ ? "[KINECT]" : "[DUMMY]";
-            std::cout << mode << " Detection #" << detection_count 
-                      << ": " << result.hands.size() << " hands, " 
-                      << result.objects.size() << " objects" << std::endl;
-        }
+        // Dummy objects
+        result.objects.emplace_back(0.15f, 0.4f, 0.9f, "object", 0.7f);
+        result.objects.emplace_back(-0.2f, 0.5f, 0.85f, "object", 0.8f);
         
         return result;
     }
@@ -600,10 +441,6 @@ private:
         
         if (bytes_sent > 0) {
             message_count_++;
-            if (message_count_ % 30 == 0) {
-                std::string mode = kinect_mode_ ? "[KINECT]" : "[DUMMY]";
-                std::cout << mode << " Sent " << message_count_ << " detection messages" << std::endl;
-            }
         }
     }
     
@@ -615,7 +452,6 @@ private:
         json << "\"timestamp\":" << result.timestamp << ",";
         json << "\"mode\":\"" << (kinect_mode_ ? "kinect" : "dummy") << "\",";
         
-        // Hands array (using existing format)
         json << "\"hands\":[";
         for (size_t i = 0; i < result.hands.size(); ++i) {
             const auto& hand = result.hands[i];
@@ -625,7 +461,6 @@ private:
         }
         json << "],";
         
-        // Objects array (using existing format)
         json << "\"objects\":[";
         for (size_t i = 0; i < result.objects.size(); ++i) {
             const auto& object = result.objects[i];
@@ -649,32 +484,32 @@ private:
     std::atomic<bool> has_client_{false};
     std::atomic<int> message_count_{0};
     
-    // Kinect integration (now optional)
-    std::unique_ptr<CVKinectCapture> capture_;
+    // Kinect members (glview.c style)
     bool kinect_mode_;
-    std::thread kinect_polling_thread_;  // Dedicated Kinect polling (QCalibrationApp style)
+    freenect_context *f_ctx_ = nullptr;
+    freenect_device *f_dev_ = nullptr;
+    std::thread kinect_thread_;
+    std::atomic<bool> die_{false};
     
-    // Real object detection
+    // Buffers (exactly like glview.c)
+    uint16_t *depth_mid_ = nullptr, *depth_front_ = nullptr;
+    uint8_t *rgb_back_ = nullptr, *rgb_mid_ = nullptr, *rgb_front_ = nullptr;
+    
+    // Frame synchronization (glview.c style)
+    std::mutex gl_backbuf_mutex_;
+    std::atomic<bool> got_rgb_{false};
+    std::atomic<bool> got_depth_{false};
+    
+    // Detection
     SimpleDetector detector_;
     
-    // Frame synchronization (from existing code)
-    std::mutex frame_mutex_;
-    cv::Mat latest_rgb_;
-    cv::Mat latest_depth_;
-    uint32_t latest_rgb_timestamp_ = 0;
-    uint32_t latest_depth_timestamp_ = 0;
-    uint32_t frame_sync_threshold_ms_;  // Adjustable sync threshold
-    
-    // Dummy mode timing
+    // Timing
+    std::chrono::steady_clock::time_point kinect_start_time_;
     std::chrono::steady_clock::time_point dummy_start_time_;
-    std::chrono::steady_clock::time_point kinect_start_time_;  // For consistent Kinect timestamping
-    
-    // Debug counters
-    std::atomic<int> rgb_frame_count_{0};
-    std::atomic<int> depth_frame_count_{0};
-    std::atomic<int> sync_count_{0};
-    std::atomic<int> out_of_sync_count_{0};
 };
+
+// Static instance for freenect callbacks (defined here since it's now public)
+SimpleUDPServer* SimpleUDPServer::instance_ = nullptr;
 
 // Global server for signal handling
 std::unique_ptr<SimpleUDPServer> g_server;
@@ -691,21 +526,18 @@ int main(int argc, char* argv[]) {
     signal(SIGTERM, signalHandler);
     
     int port = 8888;
-    uint32_t sync_threshold = 50;  // Back to strict sync since we're fixing timestamps
-    
     if (argc > 1) {
         port = std::atoi(argv[1]);
     }
-    if (argc > 2) {
-        sync_threshold = std::atoi(argv[2]);
-    }
     
     std::cout << "Simple UDP Object Detection Server" << std::endl;
-    std::cout << "Will auto-detect Kinect or fall back to dummy mode" << std::endl;
-    std::cout << "Port: " << port << ", Sync threshold: " << sync_threshold << "ms" << std::endl;
-    std::cout << "📝 Note: Using our own timestamps (ignoring Kinect timestamps)" << std::endl;
+    std::cout << "Architecture: glview.c style (direct freenect integration)" << std::endl;
+    std::cout << "Port: " << port << std::endl;
     
-    g_server = std::make_unique<SimpleUDPServer>(port, sync_threshold);
+    g_server = std::make_unique<SimpleUDPServer>(port);
+    
+    // Set static instance for callbacks
+    SimpleUDPServer::instance_ = g_server.get();
     
     if (!g_server->start()) {
         std::cerr << "Failed to start server" << std::endl;
