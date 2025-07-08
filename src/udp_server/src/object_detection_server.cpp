@@ -143,13 +143,11 @@ private:
             FramePair frame_pair;
             bool has_frame = false;
             
-            {
-                std::lock_guard<std::mutex> queue_lock(queue_mutex_);
-                if (!frame_queue_.empty()) {
-                    frame_pair = frame_queue_.front();
-                    frame_queue_.pop();
-                    has_frame = true;
-                }
+            std::lock_guard<std::mutex> queue_lock(queue_mutex_);
+            if (!frame_queue_.empty()) {
+                frame_pair = frame_queue_.front();
+                frame_queue_.pop();
+                has_frame = true;
             }
             
             if (has_frame) {
@@ -171,6 +169,9 @@ private:
                     frames_since_last_stats = 0;
                     last_stats_time = now;
                 }
+            }
+            else {
+                std::cout << "No frames to process, waiting..." << std::endl;
             }
             
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
