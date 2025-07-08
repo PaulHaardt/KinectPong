@@ -25,16 +25,6 @@
 #include <cstring>
 #endif
 
-// Simple detection structures (KISS version)
-struct SimpleDetectedObject {
-    float x, y, z;
-    std::string type;
-    float confidence;
-    
-    SimpleDetectedObject(float x_, float y_, float z_, const std::string& type_, float conf_)
-        : x(x_), y(y_), z(z_), type(type_), confidence(conf_) {}
-};
-
 struct SimpleDetectionResult {
     std::vector<SimpleDetectedObject> hands;
     std::vector<SimpleDetectedObject> objects;
