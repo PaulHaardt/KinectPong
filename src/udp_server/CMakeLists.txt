@@ -38,9 +38,21 @@ target_link_libraries(calibration PRIVATE Qt6::Gui Qt6::Widgets opencv_kinect)
 add_executable(simple_server src/simple_server.cpp)
 add_executable(simple_client src/simple_client.cpp)
 
-# Link threading for both
-target_link_libraries(simple_server PRIVATE Threads::Threads)
+# Link libraries
+target_link_libraries(simple_server PRIVATE 
+    opencv_kinect          # Our existing Kinect integration library
+    Threads::Threads
+)
 target_link_libraries(simple_client PRIVATE Threads::Threads)
+
+# Set include directories for simple_server (to find capture-cv.hpp)
+target_include_directories(simple_server PRIVATE src)
+
+# Platform-specific networking libraries
+if(WIN32)
+    target_link_libraries(simple_server PRIVATE ws2_32)
+    target_link_libraries(simple_client PRIVATE ws2_32)
+endif()
 
 # Platform-specific networking libraries
 if(WIN32)
