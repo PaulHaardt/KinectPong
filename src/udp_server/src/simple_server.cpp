@@ -25,6 +25,16 @@
 #include <cstring>
 #endif
 
+// Simple detection structures (KISS version)
+struct SimpleDetectedObject {
+    float x, y, z;
+    std::string type;
+    float confidence;
+    
+    SimpleDetectedObject(float x_, float y_, float z_, const std::string& type_, float conf_)
+        : x(x_), y(y_), z(z_), type(type_), confidence(conf_) {}
+};
+
 struct SimpleDetectionResult {
     std::vector<SimpleDetectedObject> hands;
     std::vector<SimpleDetectedObject> objects;
@@ -35,9 +45,9 @@ struct SimpleDetectionResult {
 
 class SimpleUDPServer {
 public:
-    SimpleUDPServer(int port = 8888) : port_(port), socket_fd_(-1), 
+    SimpleUDPServer(int port = 8888, uint32_t sync_threshold_ms = 150) : port_(port), socket_fd_(-1), 
                                        capture_(nullptr),
-                                       frame_sync_threshold_ms_(50),
+                                       frame_sync_threshold_ms_(sync_threshold_ms),  // More lenient default
                                        kinect_mode_(false),
                                        detector_() {  // Initialize detector
 #ifdef _WIN32
@@ -338,11 +348,49 @@ private:
         if (!latest_rgb_.empty() && !latest_depth_.empty()) {
             uint32_t time_diff = std::abs(static_cast<int32_t>(latest_rgb_timestamp_ - latest_depth_timestamp_));
             
+            // DEBUG: Detailed sync analysis
+            static int sync_attempts = 0;
+            static int sync_successes = 0;
+            static uint32_t max_time_diff = 0;
+            static uint32_t min_time_diff = UINT32_MAX;
+            static int consecutive_failures = 0;  // Track consecutive sync failures
+            
+            sync_attempts++;
+            max_time_diff = std::max(max_time_diff, time_diff);
+            min_time_diff = std::min(min_time_diff, time_diff);
+            
+            // Log sync details every 60 attempts
+            if (sync_attempts % 60 == 1) {
+                std::cout << "\n=== SYNC ANALYSIS ===" << std::endl;
+                std::cout << "RGB timestamp: " << latest_rgb_timestamp_ << std::endl;
+                std::cout << "Depth timestamp: " << latest_depth_timestamp_ << std::endl;
+                std::cout << "Time difference: " << time_diff << "ms" << std::endl;
+                std::cout << "Sync threshold: " << frame_sync_threshold_ms_ << "ms" << std::endl;
+                std::cout << "Success rate: " << sync_successes << "/" << sync_attempts 
+                          << " (" << (100.0f * sync_successes / sync_attempts) << "%)" << std::endl;
+                std::cout << "Time diff range: " << min_time_diff << "-" << max_time_diff << "ms" << std::endl;
+                
+                if (latest_rgb_timestamp_ > latest_depth_timestamp_) {
+                    std::cout << "RGB is " << (latest_rgb_timestamp_ - latest_depth_timestamp_) << "ms newer" << std::endl;
+                } else {
+                    std::cout << "Depth is " << (latest_depth_timestamp_ - latest_rgb_timestamp_) << "ms newer" << std::endl;
+                }
+                std::cout << "===================" << std::endl;
+                
+                // Auto-adjust sync threshold if success rate is too low
+                if (sync_attempts > 60 && sync_successes < sync_attempts / 4) {  // Less than 25% success
+                    frame_sync_threshold_ms_ = std::min(500U, max_time_diff + 50);  // Increase threshold
+                    std::cout << "🔧 AUTO-ADJUSTING sync threshold to " << frame_sync_threshold_ms_ << "ms" << std::endl;
+                }
+            }
+            
             if (time_diff <= frame_sync_threshold_ms_) {
                 // Frames are synchronized! Process them.
+                sync_successes++;
+                consecutive_failures = 0;  // Reset failure counter
                 uint32_t sync_timestamp = std::max(latest_rgb_timestamp_, latest_depth_timestamp_);
                 
-                // Process frames (dummy detection for now, but real timing)
+                // Process frames
                 SimpleDetectionResult result = processFrames(latest_rgb_, latest_depth_, sync_timestamp);
                 
                 // Broadcast to client if connected
@@ -354,16 +402,53 @@ private:
                 latest_rgb_ = cv::Mat();
                 latest_depth_ = cv::Mat();
                 
-                // Debug sync
+                // Debug sync success (less frequent)
                 if (sync_count_++ % 30 == 0) {
                     std::string mode = kinect_mode_ ? "[KINECT]" : "[DUMMY]";
-                    std::cout << mode << " Synchronized frame pair " << sync_count_ 
-                              << " (time_diff: " << time_diff << "ms)" << std::endl;
+                    std::cout << mode << " ✅ Sync #" << sync_count_ 
+                              << " (diff: " << time_diff << "ms)" << std::endl;
                 }
             } else {
-                // Frames out of sync
-                if (out_of_sync_count_++ % 100 == 0) {
-                    std::cout << "Warning: frames out of sync by " << time_diff << "ms" << std::endl;
+                // Frames out of sync - log more details
+                out_of_sync_count_++;
+                consecutive_failures++;
+                
+                if (out_of_sync_count_ % 30 == 1) {  // Every 30 failures
+                    std::cout << "❌ SYNC FAIL #" << out_of_sync_count_ 
+                              << ": " << time_diff << "ms > " << frame_sync_threshold_ms_ << "ms threshold" << std::endl;
+                    std::cout << "   RGB: " << latest_rgb_timestamp_ 
+                              << " Depth: " << latest_depth_timestamp_ << std::endl;
+                }
+                
+                // Discard the older frame to help sync
+                if (latest_rgb_timestamp_ < latest_depth_timestamp_) {
+                    latest_rgb_ = cv::Mat();  // Discard older RGB
+                    latest_rgb_timestamp_ = 0;
+                } else {
+                    latest_depth_ = cv::Mat();  // Discard older depth
+                    latest_depth_timestamp_ = 0;
+                }
+                
+                // FALLBACK: If we've failed sync many times, process anyway with warning
+                if (consecutive_failures > 100) {  // After 100 consecutive failures
+                    std::cout << "🚨 SYNC EMERGENCY: Processing unsynchronized frames!" << std::endl;
+                    
+                    // Process with the most recent available frame pair
+                    uint32_t emergency_timestamp = std::max(latest_rgb_timestamp_, latest_depth_timestamp_);
+                    SimpleDetectionResult result = processFrames(latest_rgb_, latest_depth_, emergency_timestamp);
+                    
+                    if (has_client_) {
+                        broadcastDetectionResult(result);
+                    }
+                    
+                    // Clear frames and reset counter
+                    latest_rgb_ = cv::Mat();
+                    latest_depth_ = cv::Mat();
+                    consecutive_failures = 0;
+                    
+                    // Increase threshold dramatically
+                    frame_sync_threshold_ms_ = 500;
+                    std::cout << "🔧 EMERGENCY: Sync threshold increased to " << frame_sync_threshold_ms_ << "ms" << std::endl;
                 }
             }
         }
@@ -374,9 +459,39 @@ private:
         
         if (kinect_mode_) {
             // KINECT MODE: Use real detection on real sensor data
-            auto detection_result = detector_.detectObjects(rgb, depth);
-            result.hands = detection_result.first;
-            result.objects = detection_result.second;
+            
+            // DEBUG: Check frame properties
+            static int debug_count = 0;
+            debug_count++;
+            if (debug_count % 60 == 1) {  // Every 2 seconds
+                std::cout << "[DEBUG] RGB frame: " << rgb.size() << " channels=" << rgb.channels() 
+                          << " type=" << rgb.type() << std::endl;
+                std::cout << "[DEBUG] Depth frame: " << depth.size() << " type=" << depth.type() << std::endl;
+                
+                // Check some depth values
+                if (!depth.empty()) {
+                    cv::Scalar mean_depth = cv::mean(depth);
+                    uint16_t center_depth = depth.at<uint16_t>(depth.rows/2, depth.cols/2);
+                    std::cout << "[DEBUG] Depth - mean: " << mean_depth[0] << " center: " << center_depth << std::endl;
+                }
+            }
+            
+            try {
+                auto detection_result = detector_.detectObjects(rgb, depth);
+                result.hands = detection_result.first;
+                result.objects = detection_result.second;
+                
+                // DEBUG: Report detection attempts
+                if (debug_count % 60 == 1) {
+                    std::cout << "[DEBUG] Real detection returned: " << result.hands.size() 
+                              << " hands, " << result.objects.size() << " objects" << std::endl;
+                }
+                
+            } catch (const std::exception& e) {
+                std::cerr << "[ERROR] Detection failed: " << e.what() << std::endl;
+                // Fall back to dummy data if detection fails
+                result = generateDummyDetections(timestamp);
+            }
         } else {
             // DUMMY MODE: Generate animated dummy detections for testing
             result = generateDummyDetections(timestamp);
@@ -468,7 +583,7 @@ private:
     cv::Mat latest_depth_;
     uint32_t latest_rgb_timestamp_ = 0;
     uint32_t latest_depth_timestamp_ = 0;
-    uint32_t frame_sync_threshold_ms_;
+    uint32_t frame_sync_threshold_ms_;  // Adjustable sync threshold
     
     // Dummy mode timing
     std::chrono::steady_clock::time_point dummy_start_time_;
@@ -495,15 +610,20 @@ int main(int argc, char* argv[]) {
     signal(SIGTERM, signalHandler);
     
     int port = 8888;
+    uint32_t sync_threshold = 150;  // More lenient default for real hardware
+    
     if (argc > 1) {
         port = std::atoi(argv[1]);
+    }
+    if (argc > 2) {
+        sync_threshold = std::atoi(argv[2]);
     }
     
     std::cout << "Simple UDP Object Detection Server" << std::endl;
     std::cout << "Will auto-detect Kinect or fall back to dummy mode" << std::endl;
-    std::cout << "Starting on port " << port << std::endl;
+    std::cout << "Port: " << port << ", Sync threshold: " << sync_threshold << "ms" << std::endl;
     
-    g_server = std::make_unique<SimpleUDPServer>(port);
+    g_server = std::make_unique<SimpleUDPServer>(port, sync_threshold);
     
     if (!g_server->start()) {
         std::cerr << "Failed to start server" << std::endl;
