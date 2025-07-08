@@ -35,9 +35,9 @@ struct SimpleDetectionResult {
 
 class SimpleUDPServer {
 public:
-    SimpleUDPServer(int port = 8888, uint32_t sync_threshold_ms = 150) : port_(port), socket_fd_(-1), 
+    SimpleUDPServer(int port = 8888, uint32_t sync_threshold_ms = 50) : port_(port), socket_fd_(-1), 
                                        capture_(nullptr),
-                                       frame_sync_threshold_ms_(sync_threshold_ms),  // More lenient default
+                                       frame_sync_threshold_ms_(sync_threshold_ms),  // Back to strict sync
                                        kinect_mode_(false),
                                        detector_() {  // Initialize detector
 #ifdef _WIN32
@@ -65,6 +65,9 @@ public:
         if (tryStartKinect()) {
             kinect_mode_ = true;
             std::cout << "🟢 KINECT MODE: Real sensor data" << std::endl;
+            
+            // Start dedicated Kinect polling thread (inspired by QCalibrationApp)
+            startKinectPolling();
         } else {
             kinect_mode_ = false;
             std::cout << "🟡 DUMMY MODE: Simulated sensor data (no Kinect detected)" << std::endl;
@@ -78,6 +81,11 @@ public:
     
     void stop() {
         running_ = false;
+        
+        // Stop Kinect polling thread
+        if (kinect_polling_thread_.joinable()) {
+            kinect_polling_thread_.join();
+        }
         
         if (kinect_mode_ && capture_) {
             try {
@@ -114,15 +122,8 @@ public:
         auto last_dummy_time = std::chrono::steady_clock::now();
         
         while (running_) {
-            // Handle Kinect events OR dummy timing
-            if (kinect_mode_) {
-                // Process Kinect events (CRITICAL: must be called frequently)
-                try {
-                    capture_->next_loop_event();
-                } catch (const std::exception& e) {
-                    std::cerr << "Kinect processing error: " << e.what() << std::endl;
-                }
-            } else {
+            // Handle dummy mode timing (Kinect mode handled by separate thread)
+            if (!kinect_mode_) {
                 // Dummy mode: generate frames at ~30fps
                 auto now = std::chrono::steady_clock::now();
                 auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_dummy_time);
@@ -158,7 +159,7 @@ public:
             }
             
             // Small sleep to prevent CPU spinning
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));  // Less frequent than Kinect polling
         }
     }
 
@@ -211,17 +212,76 @@ private:
         }
     }
     
+    void startKinectPolling() {
+        // Start dedicated Kinect polling thread (now matching glview.c architecture)
+        kinect_polling_thread_ = std::thread([this]() {
+            std::cout << "🔄 Starting Kinect polling thread (glview.c style - tight loop)" << std::endl;
+            
+            while (running_ && kinect_mode_) {
+                try {
+                    // Match glview.c: tight loop with no sleep, just like freenect_threadfunc
+                    int result = 0;
+                    for (int i = 0; i < 10 && running_; ++i) {  // Process multiple events per iteration
+                        capture_->next_loop_event();
+                    }
+                    
+                    // Very short sleep (much less than 10ms) to prevent 100% CPU
+                    std::this_thread::sleep_for(std::chrono::microseconds(500));  // 0.5ms instead of 10ms
+                    
+                } catch (const std::exception& e) {
+                    std::cerr << "Kinect polling error: " << e.what() << std::endl;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Back off on error
+                }
+            }
+            
+            std::cout << "🔄 Kinect polling thread stopped" << std::endl;
+        });
+    }
+    
     void setupKinectCallbacks() {
         if (!capture_) return;
         
+        // Store server start time for consistent timestamping
+        kinect_start_time_ = std::chrono::steady_clock::now();
+        
         // RGB frame callback (using existing capture-cv.hpp pattern)
-        capture_->set_rgb_callback([this](cv::Mat& rgb, uint32_t timestamp) {
-            onRGBFrame(rgb, timestamp);
+        capture_->set_rgb_callback([this](cv::Mat& rgb, uint32_t kinect_timestamp) {
+            // Generate our own consistent timestamp
+            auto now = std::chrono::steady_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - kinect_start_time_);
+            uint32_t our_timestamp = static_cast<uint32_t>(elapsed.count());
+            
+            // Debug: Show timestamp comparison occasionally
+            static int debug_count = 0;
+            debug_count++;
+            if (debug_count % 60 == 1) {
+                std::cout << "[TIMESTAMP] RGB - Kinect: " << kinect_timestamp 
+                          << "ms, Ours: " << our_timestamp << "ms (diff: " 
+                          << std::abs(static_cast<int64_t>(kinect_timestamp) - static_cast<int64_t>(our_timestamp)) 
+                          << "ms)" << std::endl;
+            }
+            
+            onRGBFrame(rgb, our_timestamp);
         });
         
         // Depth frame callback
-        capture_->set_depth_callback([this](cv::Mat& depth, uint32_t timestamp) {
-            onDepthFrame(depth, timestamp);
+        capture_->set_depth_callback([this](cv::Mat& depth, uint32_t kinect_timestamp) {
+            // Generate our own consistent timestamp  
+            auto now = std::chrono::steady_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - kinect_start_time_);
+            uint32_t our_timestamp = static_cast<uint32_t>(elapsed.count());
+            
+            // Debug: Show timestamp comparison occasionally
+            static int debug_count = 0;
+            debug_count++;
+            if (debug_count % 60 == 1) {
+                std::cout << "[TIMESTAMP] Depth - Kinect: " << kinect_timestamp 
+                          << "ms, Ours: " << our_timestamp << "ms (diff: " 
+                          << std::abs(static_cast<int64_t>(kinect_timestamp) - static_cast<int64_t>(our_timestamp)) 
+                          << "ms)" << std::endl;
+            }
+            
+            onDepthFrame(depth, our_timestamp);
         });
     }
     
@@ -308,6 +368,20 @@ private:
     }
     
     void onRGBFrame(cv::Mat& rgb, uint32_t timestamp) {
+        // DEBUG: Are callbacks even being called?
+        static int rgb_callback_count = 0;
+        rgb_callback_count++;
+        
+        if (rgb_callback_count % 30 == 1) {
+            std::cout << "[CALLBACK DEBUG] RGB callback #" << rgb_callback_count 
+                      << " - Size: " << rgb.size() << " Channels: " << rgb.channels() 
+                      << " Type: " << rgb.type() << " Empty: " << rgb.empty() << std::endl;
+                      
+            // Check if data looks valid
+            cv::Scalar mean = cv::mean(rgb);
+            std::cout << "[CALLBACK DEBUG] RGB mean: (" << mean[0] << "," << mean[1] << "," << mean[2] << ")" << std::endl;
+        }
+        
         std::lock_guard<std::mutex> lock(frame_mutex_);
         latest_rgb_ = rgb.clone();
         latest_rgb_timestamp_ = timestamp;
@@ -321,6 +395,21 @@ private:
     }
     
     void onDepthFrame(cv::Mat& depth, uint32_t timestamp) {
+        // DEBUG: Are callbacks even being called?
+        static int depth_callback_count = 0;
+        depth_callback_count++;
+        
+        if (depth_callback_count % 30 == 1) {
+            std::cout << "[CALLBACK DEBUG] Depth callback #" << depth_callback_count 
+                      << " - Size: " << depth.size() << " Type: " << depth.type() 
+                      << " Empty: " << depth.empty() << std::endl;
+                      
+            // Check if data looks valid
+            cv::Scalar mean = cv::mean(depth);
+            uint16_t center_val = depth.empty() ? 0 : depth.at<uint16_t>(depth.rows/2, depth.cols/2);
+            std::cout << "[CALLBACK DEBUG] Depth mean: " << mean[0] << " Center: " << center_val << std::endl;
+        }
+        
         std::lock_guard<std::mutex> lock(frame_mutex_);
         latest_depth_ = depth.clone();
         latest_depth_timestamp_ = timestamp;
@@ -563,6 +652,7 @@ private:
     // Kinect integration (now optional)
     std::unique_ptr<CVKinectCapture> capture_;
     bool kinect_mode_;
+    std::thread kinect_polling_thread_;  // Dedicated Kinect polling (QCalibrationApp style)
     
     // Real object detection
     SimpleDetector detector_;
@@ -577,6 +667,7 @@ private:
     
     // Dummy mode timing
     std::chrono::steady_clock::time_point dummy_start_time_;
+    std::chrono::steady_clock::time_point kinect_start_time_;  // For consistent Kinect timestamping
     
     // Debug counters
     std::atomic<int> rgb_frame_count_{0};
@@ -600,7 +691,7 @@ int main(int argc, char* argv[]) {
     signal(SIGTERM, signalHandler);
     
     int port = 8888;
-    uint32_t sync_threshold = 150;  // More lenient default for real hardware
+    uint32_t sync_threshold = 50;  // Back to strict sync since we're fixing timestamps
     
     if (argc > 1) {
         port = std::atoi(argv[1]);
@@ -612,6 +703,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Simple UDP Object Detection Server" << std::endl;
     std::cout << "Will auto-detect Kinect or fall back to dummy mode" << std::endl;
     std::cout << "Port: " << port << ", Sync threshold: " << sync_threshold << "ms" << std::endl;
+    std::cout << "📝 Note: Using our own timestamps (ignoring Kinect timestamps)" << std::endl;
     
     g_server = std::make_unique<SimpleUDPServer>(port, sync_threshold);
     
