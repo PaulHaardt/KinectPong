@@ -9,8 +9,9 @@
 #include <mutex>
 #include <iomanip>
 
-// Add Kinect integration
+// Add Kinect integration and detection
 #include "capture-cv.hpp"
+#include "simple_detector.hpp"
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -47,7 +48,8 @@ public:
     SimpleUDPServer(int port = 8888) : port_(port), socket_fd_(-1), 
                                        capture_(nullptr),
                                        frame_sync_threshold_ms_(50),
-                                       kinect_mode_(false) {
+                                       kinect_mode_(false),
+                                       detector_() {  // Initialize detector
 #ifdef _WIN32
         WSADATA wsaData;
         WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -255,6 +257,66 @@ private:
         onDepthFrame(dummy_depth, timestamp + 2);  // Slight offset to test sync
     }
     
+    SimpleDetectionResult generateDummyDetections(uint32_t timestamp) {
+        SimpleDetectionResult result(timestamp);
+        
+        // Animated dummy data for development/testing
+        static int counter = 0;
+        counter++;
+        
+        // Dummy hand (simulate hand waving)
+        if (counter % 60 < 45) {  // Show hand ~75% of the time
+            result.hands.emplace_back(
+                0.2f + 0.3f * sin(counter * 0.08f),  // x: side to side
+                -0.1f + 0.15f * cos(counter * 0.06f), // y: up and down  
+                1.0f + 0.2f * sin(counter * 0.04f),  // z: forward/back
+                "hand",
+                0.6f + 0.2f * sin(counter * 0.1f)    // confidence: varies
+            );
+        }
+        
+        // Show second hand occasionally
+        if (counter % 80 < 30) {
+            result.hands.emplace_back(
+                -0.25f + 0.2f * cos(counter * 0.07f),
+                0.05f + 0.1f * sin(counter * 0.09f), 
+                1.1f + 0.15f * cos(counter * 0.05f),
+                "hand",
+                0.5f + 0.3f * cos(counter * 0.12f)
+            );
+        }
+        
+        // Dummy objects on table (more stable)
+        result.objects.emplace_back(
+            0.15f + 0.05f * sin(counter * 0.02f),  // slight movement
+            0.4f, 
+            0.9f, 
+            "object", 
+            0.7f
+        );
+        
+        result.objects.emplace_back(
+            -0.2f, 
+            0.5f + 0.03f * cos(counter * 0.015f), 
+            0.85f, 
+            "object", 
+            0.8f
+        );
+        
+        // Third object appears/disappears
+        if (counter % 100 < 70) {
+            result.objects.emplace_back(
+                0.05f, 
+                0.3f, 
+                0.95f + 0.02f * sin(counter * 0.03f), 
+                "object", 
+                0.6f
+            );
+        }
+        
+        return result;
+    }
+    
     void onRGBFrame(cv::Mat& rgb, uint32_t timestamp) {
         std::lock_guard<std::mutex> lock(frame_mutex_);
         latest_rgb_ = rgb.clone();
@@ -320,30 +382,24 @@ private:
     SimpleDetectionResult processFrames(const cv::Mat& rgb, const cv::Mat& depth, uint32_t timestamp) {
         SimpleDetectionResult result(timestamp);
         
-        // KISS: For now, return dummy data but with real timestamps
-        // In dummy mode, make the animation more obvious
-        // In Kinect mode, use same dummy data (until next iteration adds real detection)
-        
-        static int counter = 0;
-        counter++;
-        
-        // Different animation patterns for Kinect vs Dummy mode (just for clarity)
-        float speed_multiplier = kinect_mode_ ? 1.0f : 2.0f;  // Dummy mode animates faster
-        
-        if (counter % 60 < 45) {  // Show hand ~75% of the time
-            result.hands.emplace_back(
-                0.2f + 0.3f * sin(counter * 0.05f * speed_multiplier),  // x
-                0.1f + 0.2f * cos(counter * 0.05f * speed_multiplier),  // y 
-                1.0f + 0.3f * sin(counter * 0.03f * speed_multiplier),  // z
-                "hand",
-                kinect_mode_ ? 0.8f : 0.6f  // Lower confidence in dummy mode
-            );
+        if (kinect_mode_) {
+            // KINECT MODE: Use real detection on real sensor data
+            auto detection_result = detector_.detectObjects(rgb, depth);
+            result.hands = detection_result.first;
+            result.objects = detection_result.second;
+        } else {
+            // DUMMY MODE: Generate animated dummy detections for testing
+            result = generateDummyDetections(timestamp);
         }
         
-        // Objects on table
-        result.objects.emplace_back(0.1f, 0.5f, 0.8f, "object", kinect_mode_ ? 0.7f : 0.5f);
-        if (counter % 40 < 30) {
-            result.objects.emplace_back(-0.2f, 0.6f, 0.85f, "object", kinect_mode_ ? 0.6f : 0.4f);
+        // Debug output every 30 frames
+        static int detection_count = 0;
+        detection_count++;
+        if (detection_count % 30 == 0) {
+            std::string mode = kinect_mode_ ? "[KINECT]" : "[DUMMY]";
+            std::cout << mode << " Detection #" << detection_count 
+                      << ": " << result.hands.size() << " hands, " 
+                      << result.objects.size() << " objects" << std::endl;
         }
         
         return result;
@@ -412,6 +468,9 @@ private:
     // Kinect integration (now optional)
     std::unique_ptr<CVKinectCapture> capture_;
     bool kinect_mode_;
+    
+    // Real object detection
+    SimpleDetector detector_;
     
     // Frame synchronization (from existing code)
     std::mutex frame_mutex_;

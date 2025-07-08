@@ -41,6 +41,7 @@ add_executable(simple_client src/simple_client.cpp)
 # Link libraries
 target_link_libraries(simple_server PRIVATE 
     opencv_kinect          # Our existing Kinect integration library
+    opencv_imgproc         # Needed for detection (cvtColor, morphologyEx, etc.)
     Threads::Threads
 )
 target_link_libraries(simple_client PRIVATE Threads::Threads)
