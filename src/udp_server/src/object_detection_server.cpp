@@ -258,7 +258,7 @@ int main(int argc, char* argv[]) {
         
         // Print statistics every 30 seconds
         auto now = std::chrono::steady_clock::now();
-        if (std::chrono::duration_cast<std::chrono::seconds>(now - last_stats_print).count() >= 30) {
+        if (std::chrono::duration_cast<std::chrono::seconds>(now - last_stats_print).count() >= 2) {
             g_server->printStatistics();
             last_stats_print = now;
         }
