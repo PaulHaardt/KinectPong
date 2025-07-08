@@ -6,6 +6,10 @@ TagManager:
   tags:
   - Left
   - Right
+  - Red
+  - Blue
+  - Timer
+  - Restart
   layers:
   - Default
   - TransparentFX
