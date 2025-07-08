@@ -45,7 +45,7 @@ public:
     if (maxVal - minVal < 1e-6) {
       std::cerr << "Invalid depth range: " << minVal << " - " << maxVal
                 << std::endl;
-      return -1;
+      return {hands, objects};
     }
 
     // Normalize to 8-bit

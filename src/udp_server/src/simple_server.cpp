@@ -369,9 +369,6 @@ private:
         std::cout << "Kinect cleanup complete" << std::endl;
     }
     
-    // ========== FREENECT CALLBACKS (glview.c style) ==========
-    
-
     SimpleDetectionResult processFrames(const cv::Mat& rgb, const cv::Mat& depth, uint32_t timestamp) {
         SimpleDetectionResult result(timestamp);
         
@@ -418,14 +415,13 @@ private:
                 0.2f + 0.3f * sin(counter * 0.08f),
                 -0.1f + 0.15f * cos(counter * 0.06f), 
                 1.0f + 0.2f * sin(counter * 0.04f),
-                "hand",
-                0.6f + 0.2f * sin(counter * 0.1f)
+                0
             );
         }
         
         // Dummy objects
-        result.objects.emplace_back(0.15f, 0.4f, 0.9f, "object", 0.7f);
-        result.objects.emplace_back(-0.2f, 0.5f, 0.85f, "object", 0.8f);
+        result.objects.emplace_back(0.15f, 0.4f, 0.9f, 1);
+        result.objects.emplace_back(-0.2f, 0.5f, 0.85f, 2);
         
         return result;
     }
@@ -456,7 +452,7 @@ private:
         for (size_t i = 0; i < result.hands.size(); ++i) {
             const auto& hand = result.hands[i];
             json << "{\"x\":" << hand.x << ",\"y\":" << hand.y << ",\"z\":" << hand.z 
-                 << ",\"confidence\":" << hand.confidence << "}";
+                 << ",\"id\":" << hand.id << "}";
             if (i < result.hands.size() - 1) json << ",";
         }
         json << "],";
@@ -465,7 +461,7 @@ private:
         for (size_t i = 0; i < result.objects.size(); ++i) {
             const auto& object = result.objects[i];
             json << "{\"x\":" << object.x << ",\"y\":" << object.y << ",\"z\":" << object.z 
-                 << ",\"type\":\"" << object.type << "\",\"confidence\":" << object.confidence << "}";
+                 << ",\"id\":" << object.id << "}";
             if (i < result.objects.size() - 1) json << ",";
         }
         json << "]";
