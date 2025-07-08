@@ -1,0 +1,7 @@
+[requires]
+libfreenect/0.7.0
+
+[generators]
+CMakeDeps
+CMakeToolchain
+
