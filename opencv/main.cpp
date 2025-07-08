@@ -1,33 +1,66 @@
-
 #include <iostream>
 #include <opencv2/opencv.hpp>
 
-int main() {
-  // Open video capture (0 for default camera, or specify video file path)
-  cv::VideoCapture cap("recordings/depth_capture.avi");
-  // For video file, use: cv::VideoCapture cap("path/to/video.mp4");
+#include <OpenNI.h>
 
-  if (!cap.isOpened()) {
-    std::cerr << "Error: Cannot open video source" << std::endl;
+int main() {
+  // Initialize OpenNI
+  openni::Status rc = openni::OpenNI::initialize();
+  if (rc != openni::STATUS_OK) {
+    std::cerr << "Initialize failed: " << openni::OpenNI::getExtendedError()
+              << std::endl;
     return -1;
   }
 
-  cv::Mat frame, imgGray, depth8, depthEq, mask, filtered_mask;
+  // Open device
+  openni::Device device;
+  rc = device.open(openni::ANY_DEVICE);
+  if (rc != openni::STATUS_OK) {
+    std::cerr << "Couldn't open device: " << openni::OpenNI::getExtendedError()
+              << std::endl;
+    return -1;
+  }
+
+  // Create depth stream
+  openni::VideoStream depth;
+  rc = depth.create(device, openni::SENSOR_DEPTH);
+  if (rc != openni::STATUS_OK) {
+    std::cerr << "Couldn't create depth stream: "
+              << openni::OpenNI::getExtendedError() << std::endl;
+    return -1;
+  }
+
+  rc = depth.start();
+  if (rc != openni::STATUS_OK) {
+    std::cerr << "Couldn't start depth stream: "
+              << openni::OpenNI::getExtendedError() << std::endl;
+    return -1;
+  }
+
+  cv::Mat imgGray, depth8, depthEq, mask, filtered_mask;
   double minVal, maxVal;
 
   while (true) {
-    // Capture frame
-    cap >> frame;
-    if (frame.empty()) {
-      std::cerr << "End of video or failed to capture frame" << std::endl;
-      break;
+    // Read frame from Kinect
+    openni::VideoFrameRef frame;
+    rc = depth.readFrame(&frame);
+    if (rc != openni::STATUS_OK) {
+      continue;
     }
 
-    // Convert to grayscale (assuming input is RGB, adjust if depth camera)
-    cv::cvtColor(frame, imgGray, cv::COLOR_BGR2GRAY);
+    // Convert to OpenCV Mat
+    cv::Mat rawDepth(frame.getHeight(), frame.getWidth(), CV_16UC1,
+                     (void *)frame.getData());
 
-    // Find min/max values
-    cv::minMaxLoc(imgGray, &minVal, &maxVal);
+    // Create a copy to avoid issues with frame buffer
+    cv::Mat depthMat = rawDepth.clone();
+
+    // Convert depth to grayscale (depth is already single channel)
+    // For depth data, we don't need cvtColor - it's already grayscale
+    depthMat.convertTo(imgGray, CV_8UC1, 255.0 / 65535.0); // Normalize 16-bit to 8-bit
+
+    // Find min/max values on the actual depth data
+    cv::minMaxLoc(depthMat, &minVal, &maxVal);
 
     // Avoid divide-by-zero
     if (maxVal - minVal < 1e-6) {
@@ -36,8 +69,8 @@ int main() {
       continue;
     }
 
-    // Normalize to 8-bit
-    imgGray.convertTo(depth8, CV_8UC1, 255.0 / (maxVal - minVal),
+    // Better normalization for depth data
+    depthMat.convertTo(depth8, CV_8UC1, 255.0 / (maxVal - minVal),
                       -minVal * 255.0 / (maxVal - minVal));
 
     // Histogram equalization
@@ -151,19 +184,21 @@ int main() {
       }
     }
 
-    // Display results
-    cv::imshow("Original Frame", frame);
+    // Display results - now using cv::Mat objects
+    cv::imshow("Original Frame", depth8);  // Show the processed depth as grayscale
     cv::imshow("Processed Mask", filtered_mask);
     cv::imshow("Farthest Points", visualization);
 
-    // Exit on 'q' key press or ESC
+    // Exit condition
     char key = cv::waitKey(1) & 0xFF;
     if (key == 'q' || key == 27) {
       break;
     }
   }
 
-  cap.release();
-  cv::destroyAllWindows();
+  depth.stop();
+  depth.destroy();
+  device.close();
+  openni::OpenNI::shutdown();
   return 0;
 }
