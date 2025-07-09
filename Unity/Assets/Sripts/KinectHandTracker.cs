@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using TMPro;
 using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.UI;
@@ -25,6 +26,9 @@ namespace Sripts
         
         [Header("Canvas Configuration")]
         public RectTransform canvasRect;
+        public TMP_Text LeftCoordinateLogger;
+        public TMP_Text RightCoordinateLogger;
+        public TMP_Text rawJSONLogger;
 
         [Header("Movement Settings")]
         public float xMovementScale = 1.0f; // 1m movement range
@@ -50,6 +54,15 @@ namespace Sripts
         
         // Thread-safe data exchange
         private readonly object dataLock = new object();
+        
+        // Thread-safe UI text updates
+        private readonly object textLock = new object();
+        private string pendingLeftText = "";
+        private string pendingRightText = "";
+        private string pendingRawJSONText = "";
+        private bool hasLeftTextUpdate = false;
+        private bool hasRightTextUpdate = false;
+        private bool hasRawJSONUpdate = false;
         
         [Serializable]
         public struct DetectedObject
@@ -133,33 +146,54 @@ namespace Sripts
 
             while (isReceiving)
             {
-                    byte[] data = udpClient.Receive(ref remoteEndPoint);
-                    string jsonString = Encoding.UTF8.GetString(data);
+                byte[] data = udpClient.Receive(ref remoteEndPoint);
+                string jsonString = Encoding.UTF8.GetString(data);
                     
-                    CoordinatesData coordinatesData = JsonUtility.FromJson<CoordinatesData>(jsonString);
+                CoordinatesData coordinatesData = JsonUtility.FromJson<CoordinatesData>(jsonString);
 
-                    lock (dataLock)
+                lock (textLock)
+                {
+                    pendingRawJSONText = jsonString;
+                    hasRawJSONUpdate = true;
+                }
+                    
+                lock (dataLock)
+                {
+                    if (coordinatesData.hands != null)
                     {
-                        if (coordinatesData.hands != null)
+                        foreach (var hand in coordinatesData.hands)
                         {
-                            foreach (var hand in coordinatesData.hands)
+                            if (hand.id == 0) // Left hand
                             {
-                                if (hand.id == 0) // Left hand
+                                leftHandPos = new Vector2(hand.x, hand.y);
+
+                                lock (textLock)
                                 {
-                                    leftHandPos = new Vector2(hand.x, hand.y);
+                                    pendingLeftText = $"x: {leftHandPos.x} y: {leftHandPos.y}";
+                                    hasLeftTextUpdate = true;
                                 }
-                                else if (hand.id == 1) // Right hand
+                            }
+                            else if (hand.id == 1) // Right hand
+                            {
+                                rightHandPos = new Vector2(hand.x, hand.y);
+                                    
+                                // Queue right coordinate text update
+                                lock (textLock)
                                 {
-                                    rightHandPos = new Vector2(hand.x, hand.y);
+                                    pendingRightText = $"x: {rightHandPos.x} y: {rightHandPos.y}";
+                                    hasRightTextUpdate = true;
                                 }
                             }
                         }
                     }
+                }
             }
         }
 
         private void Update()
         {
+            UpdateUITexts();
+            
             lock (dataLock)
             {
                 UpdateHandHistory();
@@ -168,6 +202,30 @@ namespace Sripts
             }
         }
 
+        private void UpdateUITexts()
+        {
+            lock (textLock)
+            {
+                if (hasLeftTextUpdate)
+                {
+                    LeftCoordinateLogger.text = pendingLeftText;
+                    hasLeftTextUpdate = false;
+                }
+                
+                if (hasRightTextUpdate)
+                {
+                    RightCoordinateLogger.text = pendingRightText;
+                    hasRightTextUpdate = false;
+                }
+                
+                if (hasRawJSONUpdate)
+                {
+                    rawJSONLogger.text = pendingRawJSONText;
+                    hasRawJSONUpdate = false;
+                }
+            }
+        }
+        
         private void UpdateHandHistory()
         {
             leftHandHistory[historyIndex] = leftHandPos;
