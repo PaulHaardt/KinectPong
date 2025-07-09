@@ -20,10 +20,11 @@ namespace Sripts
         [Header("Paddle References")]
         public Transform leftPaddle;
         public Transform rightPaddle;
+        private RectTransform leftPaddleRect;
+        private RectTransform rightPaddleRect;
         
         [Header("Canvas Configuration")]
-        public Canvas canvas;
-        public CanvasScaler canvasScaler;
+        public RectTransform canvasRect;
 
         [Header("Movement Settings")]
         public float xMovementScale = 1.0f; // 1m movement range
@@ -47,10 +48,6 @@ namespace Sripts
         private Vector2[] rightHandHistory;
         private int historyIndex = 0;
         
-        // Paddle sizes
-        private Vector2 leftPaddleSize;
-        private Vector2 rightPaddleSize;
-    
         // Thread-safe data exchange
         private readonly object dataLock = new object();
         
@@ -72,33 +69,12 @@ namespace Sripts
 
         private void Start()
         {
-            InitializeCanvasAndPaddles();
+            leftPaddleRect = leftPaddle.GetComponent<RectTransform>();
+            rightPaddleRect = rightPaddle.GetComponent<RectTransform>();
             InitializeSmoothing();
             StartUDPListener();
         }
 
-        private void InitializeCanvasAndPaddles()
-        {
-            if (canvas == null)
-            {
-                Debug.LogError("Canvas reference is required!");
-                return;
-            }
-    
-            // Get paddle dimensions
-            if (leftPaddle)
-            {
-                RectTransform leftRect = leftPaddle.GetComponent<RectTransform>();
-                leftPaddleSize = leftRect ? leftRect.rect.size : Vector2.one;
-            }
-    
-            if (rightPaddle)
-            {
-                RectTransform rightRect = rightPaddle.GetComponent<RectTransform>();
-                rightPaddleSize = rightRect ? rightRect.rect.size : Vector2.one;
-            }
-        }
-        
         private void InitializeSmoothing()
         {
             leftHandHistory = new Vector2[averageFrames];
@@ -226,16 +202,11 @@ namespace Sripts
 
         private void MovePaddles()
         {
-            if (!canvas) return;
+            if (!canvasRect) return;
 
             // Get canvas dimensions
-            RectTransform canvasRect = canvas.GetComponent<RectTransform>();
             float canvasWidth = canvasRect.rect.width;
             float canvasHeight = canvasRect.rect.height;
-
-            RectTransform leftPaddleRect = leftPaddle.GetComponent<RectTransform>();
-            RectTransform rightPaddleRect = rightPaddle.GetComponent<RectTransform>();
-    
             float paddleWidth = leftPaddleRect.rect.width;
             float paddleHeight = leftPaddleRect.rect.height;
 
