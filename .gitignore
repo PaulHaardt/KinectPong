@@ -119,3 +119,7 @@ Unity/[Rr]ecordings/
 /Unity/[Aa]ssets/[Ss]treamingAssets/aa.meta
 /Unity/[Aa]ssets/[Ss]treamingAssets/aa/*
 
+/Unity/old
+/Unity/.idea
+/Unity/.vscode
+/src/udp_server/src/.vscode

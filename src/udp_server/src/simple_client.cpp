@@ -19,7 +19,7 @@
 
 class SimpleUDPClient {
 public:
-    SimpleUDPClient(const std::string& server_ip = "127.0.0.1", int server_port = 8888)
+    SimpleUDPClient(const std::string& server_ip = "172.22.181.115", int server_port = 8888)
         : server_ip_(server_ip), server_port_(server_port), socket_fd_(-1) {
 #ifdef _WIN32
         WSADATA wsaData;
@@ -156,7 +156,7 @@ int main(int argc, char* argv[]) {
     signal(SIGINT, signalHandler);
     signal(SIGTERM, signalHandler);
     
-    std::string server_ip = "127.0.0.1";
+    std::string server_ip = "172.22.181.115";
     int server_port = 8888;
     
     if (argc > 1) {
