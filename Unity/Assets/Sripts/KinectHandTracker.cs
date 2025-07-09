@@ -153,7 +153,7 @@ namespace Sripts
 
                 lock (textLock)
                 {
-                    pendingRawJSONText = jsonString;
+                    pendingRawJSONText = $"{serverAddress}: " + jsonString;
                     hasRawJSONUpdate = true;
                 }
                     
@@ -208,13 +208,13 @@ namespace Sripts
             {
                 if (hasLeftTextUpdate)
                 {
-                    LeftCoordinateLogger.text = pendingLeftText;
+                    LeftCoordinateLogger.text = $"ip: {serverIP}\n{pendingLeftText}";
                     hasLeftTextUpdate = false;
                 }
                 
                 if (hasRightTextUpdate)
                 {
-                    RightCoordinateLogger.text = pendingRightText;
+                    RightCoordinateLogger.text = $"ip: {serverPort}\n{pendingRightText}";
                     hasRightTextUpdate = false;
                 }
                 

@@ -514,7 +514,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   serverPort: 8888
   localPort: 8888
-  serverIP: 172.22.181.115
+  serverIP: 127.0.0.1
   leftPaddle: {fileID: 1338118847}
   rightPaddle: {fileID: 1957692357}
   canvasRect: {fileID: 1313849709}
