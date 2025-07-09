@@ -18,7 +18,7 @@ class SimpleDetector {
 public:
   SimpleDetector() {
     low_threshold = 0;
-    high_threshold = 10;
+    high_threshold = 50;
   }
 
   // Main detection function
@@ -144,11 +144,8 @@ public:
               // Calculate minimum distance to any border
               int dist_to_left = x;
               int dist_to_right = (labels.cols - 1) - x;
-              int dist_to_top = y;
-              int dist_to_bottom = (labels.rows - 1) - y;
 
-              int min_border_distance = std::min(
-                  {dist_to_left, dist_to_right, dist_to_top, dist_to_bottom});
+              int min_border_distance = std::min({dist_to_left, dist_to_right});
 
               // Keep track of the point farthest from any border
               if (min_border_distance > max_distance) {
