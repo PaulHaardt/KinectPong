@@ -156,11 +156,9 @@ int main() {
             if (labels.at<int>(y, x) == i) {
               int dist_to_left = x;
               int dist_to_right = (labels.cols - 1) - x;
-              int dist_to_top = y;
-              int dist_to_bottom = (labels.rows - 1) - y;
 
               int min_border_distance = std::min(
-                  {dist_to_left, dist_to_right, dist_to_top, dist_to_bottom});
+                  {dist_to_left, dist_to_right});
 
               if (min_border_distance > max_distance) {
                 max_distance = min_border_distance;
