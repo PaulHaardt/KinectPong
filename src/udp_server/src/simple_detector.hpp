@@ -160,7 +160,7 @@ public:
         if (farthest_point.x != -1) {
           SimpleDetectedObject object =
               SimpleDetectedObject(farthest_point.x, farthest_point.y, 0, i);
-          objects.push_back(object);
+          hands.push_back(object);
         }
       }
     }
