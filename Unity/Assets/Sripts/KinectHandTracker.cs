@@ -16,7 +16,7 @@ namespace Sripts
         [Header("UDP Configuration")]
         public int serverPort = 8888;
         public int localPort = 8888;
-        public string serverIP = "172.22.181.115";
+        public string serverIP = "127.0.0.1";
         
         [Header("Paddle References")]
         public Transform leftPaddle;
