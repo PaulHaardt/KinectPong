@@ -32,9 +32,6 @@ public class movePaddle : MonoBehaviour
         
         // Normalize speed based on canvas height (reference height = 200)
         normalizedSpeed = speed * (canvasHeight / 200f);
-        
-        Debug.Log($"Canvas Height: {canvasHeight}, Paddle Height: {paddleHeight}");
-        Debug.Log($"Limits - Top: {topLimit}, Bottom: {bottomLimit}");
     }
 
     private void Update()

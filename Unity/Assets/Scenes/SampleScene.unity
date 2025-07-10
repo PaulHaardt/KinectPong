@@ -512,9 +512,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e3f98265744143b58cffc5f8decba1c6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  serverPort: 8888
-  localPort: 8888
-  serverIP: 127.0.0.1
   leftPaddle: {fileID: 1338118847}
   rightPaddle: {fileID: 1957692357}
   canvasRect: {fileID: 1313849709}
