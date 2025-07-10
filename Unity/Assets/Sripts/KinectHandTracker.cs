@@ -19,6 +19,8 @@ namespace Sripts
         [Header("Paddle References")]
         public Transform leftPaddle;
         public Transform rightPaddle;
+        public Transform leftLimit;
+        public Transform rightLimit;
         private RectTransform leftPaddleRect;
         private RectTransform rightPaddleRect;
         
@@ -83,6 +85,8 @@ namespace Sripts
             InitializeNetwork();
             leftPaddleRect = leftPaddle.GetComponent<RectTransform>();
             rightPaddleRect = rightPaddle.GetComponent<RectTransform>();
+            leftLimit.position = new Vector3(canvasRect.rect.width / 4, canvasRect.rect.height, 0);
+            rightLimit.position = new Vector3(canvasRect.rect.width / 4 * 3, canvasRect.rect.height, 0);
             InitializeSmoothing();
             StartUDPListener();
         }
@@ -321,6 +325,8 @@ namespace Sripts
             float yClampMin = (paddleHeight / 2);
     
             float xClampMax = (canvasWidth) - (paddleWidth / 2);
+            float xLeftMax = (leftLimit.position.x) - (paddleWidth / 2);
+            float xRightMin = (rightLimit.position.x) + (paddleWidth / 2);
             float xClampMin = (paddleWidth / 2);
     
             if (leftPaddle)
@@ -331,7 +337,7 @@ namespace Sripts
                 leftPos.y = Mathf.Lerp(yClampMin, yClampMax, normalizedY);
         
                 float normalizedX = Mathf.Clamp01(smoothedLeftPos.x);
-                leftPos.x = Mathf.Lerp(xClampMin, xClampMax, normalizedX) * xMovementScale;
+                leftPos.x = Mathf.Lerp(xClampMin, xLeftMax, normalizedX) * xMovementScale;
         
                 leftPaddle.position = leftPos;
             }
@@ -344,7 +350,7 @@ namespace Sripts
                 rightPos.y = Mathf.Lerp(yClampMin, yClampMax, normalizedY);
         
                 float normalizedX = Mathf.Clamp01(smoothedRightPos.x);
-                rightPos.x = Mathf.Lerp(xClampMin, xClampMax, normalizedX) * xMovementScale;
+                rightPos.x = Mathf.Lerp(xRightMin, xClampMax, normalizedX) * xMovementScale;
         
                 rightPaddle.position = rightPos;
             }
