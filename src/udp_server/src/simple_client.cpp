@@ -18,6 +18,8 @@
 #include <cstring>
 #endif
 
+#define IP "UDP_IP_UBUNTU"
+
 class SimpleUDPClient {
 public:
     SimpleUDPClient() : socket_fd_(-1) {
@@ -27,7 +29,7 @@ public:
 #endif
         auto env = load_env(".env");
         server_port_ = std::stoi(env["UDP_SERVER_PORT"]);
-        server_ip_ = env["UDP_IP_UBUNTU"];
+        server_ip_ = env[IP];
         std::cout << "Connecting to: " << server_ip_ << ":" << server_port_ << std::endl;
     }
     
