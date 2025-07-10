@@ -160,6 +160,10 @@ namespace Sripts
             }
             
             Debug.Log($"Connecting to server at {serverAddress}:{serverPort}");
+            Console.WriteLine($"Connecting to server at {serverAddress}:{serverPort}");
+            
+            if (File.Exists("log.txt"))
+                File.AppendAllText("log.txt", $"[{DateTime.Now}] Connecting to server at {serverAddress}:{serverPort}\n");
 
             IPEndPoint serverEndPoint = new IPEndPoint(serverAddress, serverPort);
             IPEndPoint remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
@@ -170,19 +174,41 @@ namespace Sripts
                 byte[] subscribeMessage = Encoding.UTF8.GetBytes("SUBSCRIBE");
                 udpClient.Send(subscribeMessage, subscribeMessage.Length, serverEndPoint);
                 Debug.Log("SUBSCRIBE message sent to server");
+                Console.WriteLine("SUBSCRIBE message sent to server");
             }
             catch (Exception e)
             {
                 Debug.LogError($"Failed to send SUBSCRIBE message: {e.Message}");
+                Console.WriteLine($"Failed to send SUBSCRIBE message: {e.Message}");
                 return;
             }
-            
+
+            string jsonString = string.Empty;
             while (isReceiving)
             {
-                byte[] data = udpClient.Receive(ref remoteEndPoint);
-                string jsonString = Encoding.UTF8.GetString(data);
-                    
-                CoordinatesData coordinatesData = JsonUtility.FromJson<CoordinatesData>(jsonString);
+                if (udpClient.Client.Poll(3000000, SelectMode.SelectRead)) // 3,000,000 microseconds = 3 seconds
+                {
+                    byte[] data = udpClient.Receive(ref remoteEndPoint);
+                    jsonString = Encoding.UTF8.GetString(data);
+                }
+                else
+                {
+                    string timeoutMsg =
+                        $"[{DateTime.Now}] No data received within 3 seconds from {serverAddress}:{serverPort}\n";
+                    File.AppendAllText("log.txt", timeoutMsg);
+                    continue;
+                }
+
+                CoordinatesData coordinatesData;
+                try
+                {
+                    coordinatesData = JsonUtility.FromJson<CoordinatesData>(jsonString);
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e);
+                    throw;
+                }
 
                 lock (textLock)
                 {
