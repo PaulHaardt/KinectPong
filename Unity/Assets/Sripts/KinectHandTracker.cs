@@ -13,7 +13,7 @@ namespace Sripts
     public class KinectHandTracker : MonoBehaviour
     {
         private int serverPort = 8888;
-        private int localPort = 8888;
+        private int clientPort = 8000;
         private string serverIP = "127.0.0.1";
         
         [Header("Paddle References")]
@@ -99,23 +99,26 @@ namespace Sripts
             {
                 if (line.StartsWith("UDP_SERVER_PORT="))
                 {
-                    string portStr = line.Substring("UDP_SERVER_PORT=".Length).Trim();
-                    if (int.TryParse(portStr, out int port))
+                    if (int.TryParse(line.Substring("UDP_SERVER_PORT=".Length), out int port))
                     {
-                        localPort = port;
-                        serverPort = port; // Assuming server and local ports are the same
-                    }
-                    else
-                    {
-                        Debug.LogWarning($"Invalid UDP_SERVER_PORT value: {portStr}, using default {localPort}");
+                        serverPort = port;
                     }
                 }
-                else if (line.StartsWith("UDP_IP_WSL="))
+                else if (line.StartsWith("UDP_CLIENT_PORT="))
                 {
-                    serverIP = line.Substring("UDP_IP_WSL=".Length).Trim();
+                    if (int.TryParse(line.Substring("UDP_CLIENT_PORT=".Length), out int port))
+                    {
+                        clientPort = port;
+                    }
                 }
-                
-                Debug.Log($"Environment variable set: {line}");
+                else if (line.StartsWith("UDP_SERVER_WSL="))
+                {
+                    serverIP = line.Substring("UDP_SERVER_WSL=".Length);
+                }
+                else if (line.StartsWith("UDP_SERVER_UBUNTU="))
+                {
+                    serverIP = line.Substring("UDP_SERVER_UBUNTU=".Length);
+                }
             });
         }
 
@@ -135,14 +138,15 @@ namespace Sripts
         {
             try
             {
-                udpClient = new UdpClient(localPort);
+                udpClient = new UdpClient(clientPort);
                 isReceiving = true;
             
                 udpThread = new Thread(new ThreadStart(UDPListener));
                 udpThread.IsBackground = true;
                 udpThread.Start();
             
-                Debug.Log($"UDP Client started on local port {localPort}, connecting to server {serverIP}:{serverPort}");
+                Debug.Log($"UDP Client started on local port {clientPort}, connecting to server {serverIP}:{serverPort}");
+                File.AppendAllText("log.txt", $"[{DateTime.Now}] UDP Client started on local port {clientPort}, connecting to server {serverIP}:{serverPort}\n");
             }
             catch (Exception e)
             {
@@ -162,9 +166,6 @@ namespace Sripts
             Debug.Log($"Connecting to server at {serverAddress}:{serverPort}");
             Console.WriteLine($"Connecting to server at {serverAddress}:{serverPort}");
             
-            if (File.Exists("log.txt"))
-                File.AppendAllText("log.txt", $"[{DateTime.Now}] Connecting to server at {serverAddress}:{serverPort}\n");
-
             IPEndPoint serverEndPoint = new IPEndPoint(serverAddress, serverPort);
             IPEndPoint remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
 
@@ -174,30 +175,18 @@ namespace Sripts
                 byte[] subscribeMessage = Encoding.UTF8.GetBytes("SUBSCRIBE");
                 udpClient.Send(subscribeMessage, subscribeMessage.Length, serverEndPoint);
                 Debug.Log("SUBSCRIBE message sent to server");
-                Console.WriteLine("SUBSCRIBE message sent to server");
             }
             catch (Exception e)
             {
                 Debug.LogError($"Failed to send SUBSCRIBE message: {e.Message}");
-                Console.WriteLine($"Failed to send SUBSCRIBE message: {e.Message}");
                 return;
             }
 
             string jsonString = string.Empty;
             while (isReceiving)
             {
-                if (udpClient.Client.Poll(3000000, SelectMode.SelectRead)) // 3,000,000 microseconds = 3 seconds
-                {
-                    byte[] data = udpClient.Receive(ref remoteEndPoint);
-                    jsonString = Encoding.UTF8.GetString(data);
-                }
-                else
-                {
-                    string timeoutMsg =
-                        $"[{DateTime.Now}] No data received within 3 seconds from {serverAddress}:{serverPort}\n";
-                    File.AppendAllText("log.txt", timeoutMsg);
-                    continue;
-                }
+                byte[] data = udpClient.Receive(ref remoteEndPoint);
+                jsonString = Encoding.UTF8.GetString(data);
 
                 CoordinatesData coordinatesData;
                 try
