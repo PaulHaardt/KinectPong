@@ -1,22 +1,20 @@
 ﻿using System;
-using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using TMPro;
-using Unity.VisualScripting;
 using UnityEngine;
-using UnityEngine.UI;
+using File = System.IO.File;
 
 namespace Sripts
 {
     public class KinectHandTracker : MonoBehaviour
     {
-        [Header("UDP Configuration")]
-        public int serverPort = 8888;
-        public int localPort = 8888;
-        public string serverIP = "127.0.0.1";
+        private int serverPort = 8888;
+        private int localPort = 8888;
+        private string serverIP = "127.0.0.1";
         
         [Header("Paddle References")]
         public Transform leftPaddle;
@@ -82,10 +80,43 @@ namespace Sripts
 
         private void Start()
         {
+            InitializeNetwork();
             leftPaddleRect = leftPaddle.GetComponent<RectTransform>();
             rightPaddleRect = rightPaddle.GetComponent<RectTransform>();
             InitializeSmoothing();
             StartUDPListener();
+        }
+
+        private void InitializeNetwork()
+        {
+            if (!File.Exists(".env"))
+            {
+                Debug.LogWarning($"Environment file not found at {Application.dataPath}, using default settings.");
+                return;
+            }
+            string[] envLines = File.ReadAllLines(".env");
+            envLines.ToList().ForEach(line =>
+            {
+                if (line.StartsWith("UDP_SERVER_PORT="))
+                {
+                    string portStr = line.Substring("UDP_SERVER_PORT=".Length).Trim();
+                    if (int.TryParse(portStr, out int port))
+                    {
+                        localPort = port;
+                        serverPort = port; // Assuming server and local ports are the same
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"Invalid UDP_SERVER_PORT value: {portStr}, using default {localPort}");
+                    }
+                }
+                else if (line.StartsWith("UDP_IP_WSL="))
+                {
+                    serverIP = line.Substring("UDP_IP_WSL=".Length).Trim();
+                }
+                
+                Debug.Log($"Environment variable set: {line}");
+            });
         }
 
         private void InitializeSmoothing()
@@ -127,6 +158,8 @@ namespace Sripts
                 Debug.LogError($"Invalid server IP address: {serverIP}");
                 return;
             }
+            
+            Debug.Log($"Connecting to server at {serverAddress}:{serverPort}");
 
             IPEndPoint serverEndPoint = new IPEndPoint(serverAddress, serverPort);
             IPEndPoint remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
@@ -143,7 +176,7 @@ namespace Sripts
                 Debug.LogError($"Failed to send SUBSCRIBE message: {e.Message}");
                 return;
             }
-
+            
             while (isReceiving)
             {
                 byte[] data = udpClient.Receive(ref remoteEndPoint);
