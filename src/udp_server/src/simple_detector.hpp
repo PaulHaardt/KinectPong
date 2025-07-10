@@ -4,6 +4,7 @@
 #include <opencv2/calib3d.hpp>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
+#include <opencv2/opencv.hpp>
 #include <vector>
 
 struct SimpleDetectedObject {
@@ -128,7 +129,7 @@ public:
         }
       }
 
-      if (farthest_point.x != -1 && homography_loaded) {
+      if (farthest_point.x != -1) {
         cv::Scalar color = cv::Scalar(0, 255, 0);
         cv::circle(visualization, farthest_point, 8, color, -1);
 
