@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 7093116428405515954}
   - component: {fileID: 7140175245614697759}
   - component: {fileID: 2372109455644390114}
-  - component: {fileID: 3799098423479477854}
+  - component: {fileID: 5490096285765315253}
   m_Layer: 5
   m_Name: Ball
   m_TagString: Untagged
@@ -141,7 +141,7 @@ Rigidbody2D:
   m_SleepingMode: 1
   m_CollisionDetection: 1
   m_Constraints: 0
---- !u!114 &3799098423479477854
+--- !u!114 &5490096285765315253
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -153,9 +153,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a3fdf060edeb042459d3fe015a8229c7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  rb: {fileID: 2372109455644390114}
-  Text1: {fileID: 3973720274827208018, guid: b17f70485089ceb4f815d011beabf532, type: 3}
-  Text2: {fileID: 4797936019404407944, guid: 1c181995569b65946ad292d0434ab7cc, type: 3}
-  Timer: {fileID: 8339365277877205457, guid: 7375682af8bf13f4fa3cb4c258ff9737, type: 3}
+  rb: {fileID: 0}
   RedScore: 0
   BlueScore: 0

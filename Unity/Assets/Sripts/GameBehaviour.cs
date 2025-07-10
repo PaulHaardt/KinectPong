@@ -14,7 +14,7 @@ public class GameBehaviour : MonoBehaviour
     private Text Text2;
     private Text Timer;
     private GameObject restart;
-    private float targetTime = 150;
+    private float targetTime = 30;
     public int RedScore = 0;
     public int BlueScore = 0;
 
@@ -63,52 +63,67 @@ public class GameBehaviour : MonoBehaviour
         }
 
         targetTime -= Time.deltaTime;
-        Timer.text = ((int)targetTime / 60) + ":" + ((((int)targetTime % 60) < 10) ? "0" : "") + ((int)targetTime % 60);
-        if (targetTime <= 0)
-            stop();
+
+        if (targetTime <= 0 && !isFrozen)
+            Stop();
+        else
+            Timer.text = ((int)targetTime / 60) + ":" + ((((int)targetTime % 60) < 10) ? "0" : "") + ((int)targetTime % 60);
     }
 
-    void stop()
+    async void Stop()
     {
+        Debug.Log("HOHOHOHHO");
+        isFrozen = true;
+
         if (RedScore > BlueScore)
         {
             Text1.text = "YOU WIN";
             Text2.text = "YOU LOSE";
+            Timer.text = "RED WIN!";
         }
         else if (BlueScore > RedScore)
         {
             Text2.text = "YOU WIN";
             Text1.text = "YOU LOSE";
+            Timer.text = "BLUE WIN!";
         }
         else
         {
             Text2.text = "Draw";
             Text1.text = "Draw";
+            Timer.text = "It's a draw!";
         }
-        
 
-        GameObject.FindGameObjectWithTag("Restart").transform.position += new Vector3(160, 220, 0);
+        await Task.Delay(10000);
+
+        Text1.text = "";
+        Text2.text = "";
+        Timer.text = "";
+
+        GameObject.FindGameObjectWithTag("Restart").transform.position += new Vector3(0, 220, 0);
+        GameObject.FindGameObjectWithTag("Calibrate").transform.position += new Vector3(0, 220, 0);
+        await Task.Delay(1000);
         Destroy(this.gameObject);
     }
     
     async void OnTriggerEnter2D(Collider2D collider)
     {
-        if (collider.gameObject.tag == "Left")
-        {
-            transform.position = new Vector3(Screen.width/2,Screen.height/2,0);
-            isFrozen = true;
-            BlueScore++;
-            Text2.text = RedScore + "";
-            await Task.Delay(1000);
-            isFrozen = false;
-            rb.linearVelocity = new Vector3(80,80,0);
-        }
         if (collider.gameObject.tag == "Right")
         {
             transform.position = new Vector3(Screen.width/2,Screen.height/2,0);
             isFrozen = true;
+            BlueScore++;
+            Text2.text = "" + BlueScore;
+            await Task.Delay(1000);
+            isFrozen = false;
+            rb.linearVelocity = new Vector3(80,80,0);
+        }
+        else if (collider.gameObject.tag == "Left")
+        {
+            transform.position = new Vector3(Screen.width/2,Screen.height/2,0);
+            isFrozen = true;
             RedScore++;
-            Text1.text = BlueScore + "";
+            Text1.text = "" + RedScore;
             await Task.Delay(1000);
             isFrozen = false;
             rb.linearVelocity = new Vector3(-80,-80,0);

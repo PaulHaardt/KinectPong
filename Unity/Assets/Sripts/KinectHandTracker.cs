@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 using File = System.IO.File;
 
 namespace Sripts
@@ -21,6 +22,11 @@ namespace Sripts
         public Transform rightPaddle;
         public Transform leftLimit;
         public Transform rightLimit;
+        
+        public RectTransform blueText;
+        public RectTransform redText;
+        public RectTransform timerText;
+        
         private RectTransform leftPaddleRect;
         private RectTransform rightPaddleRect;
         
@@ -87,6 +93,20 @@ namespace Sripts
             rightPaddleRect = rightPaddle.GetComponent<RectTransform>();
             leftLimit.position = new Vector3(canvasRect.rect.width / 4, canvasRect.rect.height, 0);
             rightLimit.position = new Vector3(canvasRect.rect.width / 4 * 3, canvasRect.rect.height, 0);
+
+            blueText.position = new Vector3(canvasRect.rect.width / 8, canvasRect.rect.height / 2, 0);
+            blueText.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal,  canvasRect.rect.height / 2);
+            blueText.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical,  canvasRect.rect.width / 8);
+
+
+            redText.position = new Vector3(canvasRect.rect.width / 8 * 7, canvasRect.rect.height / 2, 0);
+            redText.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal,  canvasRect.rect.height / 2);
+            redText.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical,  canvasRect.rect.width / 8);
+
+            timerText.position = new Vector3(canvasRect.rect.width / 2, canvasRect.rect.height / 2, 0);
+            timerText.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, canvasRect.rect.width / 4);
+            timerText.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical,  canvasRect.rect.height / 2);
+
             InitializeSmoothing();
             StartUDPListener();
         }

@@ -124,3 +124,5 @@ Unity/[Rr]ecordings/
 /Unity/.vscode
 /src/udp_server/src/.vscode
 Unity/.vscode/settings.json
+Unity/.vscode/settings.json
+Unity/log.txt
