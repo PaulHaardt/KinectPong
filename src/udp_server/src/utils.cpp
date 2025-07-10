@@ -74,3 +74,12 @@ std::vector<rgb8> get_cmap(float gamma) {
     }
     return color_map;
 }
+
+double getMinFromPointer(uint16_t* values, size_t length) {
+    if (length == 0) return 0.0;
+
+    std::vector<uint16_t> temp(values, values + length);
+    std::sort(temp.begin(), temp.end());
+
+    return temp[0];
+}
