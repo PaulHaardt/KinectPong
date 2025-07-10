@@ -19,6 +19,8 @@ public:
   SimpleDetector() {
     low_threshold = 0;
     high_threshold = 50;
+    input_width = 640.0f;
+    input_height = 480.0f;
   }
 
   // Main detection function
@@ -74,6 +76,8 @@ public:
     int rows = mask.rows;
     int cols = mask.cols;
 
+    std::vector<int> id_list;
+
     // Check each connected component
     for (int i = 1; i < num_labels; i++) {
       // Get bounding box of the component
@@ -83,6 +87,8 @@ public:
       int height = stats.at<int>(i, cv::CC_STAT_HEIGHT);
       int right = left + width - 1;
       int bottom = top + height - 1;
+
+      id_list.push_back(-1);
 
       // Check if component touches any border
       bool touches_border = false;
@@ -95,17 +101,21 @@ public:
         cv::Mat component_mask = (labels == i);
 
         // Check top and bottom rows
-        for (int x = left; x <= right && !touches_border; x++) {
-          if (component_mask.at<int>(top, x) != 0 ||
-              component_mask.at<int>(bottom, x) != 0) {
-            touches_border = true;
-          }
-        }
+        // for (int x = left; x <= right && !touches_border; x++) {
+        //  if (component_mask.at<int>(top, x) != 0 ||
+        //      component_mask.at<int>(bottom, x) != 0) {
+        //    touches_border = true;
+        //  }
+        //}
 
         // Check left and right columns
         for (int y = top; y <= bottom && !touches_border; y++) {
-          if (component_mask.at<int>(y, left) != 0 ||
-              component_mask.at<int>(y, right) != 0) {
+          if (component_mask.at<int>(y, left) != 0) {
+            id_list[i - 1] = 0;
+            touches_border = true;
+          }
+          if (component_mask.at<int>(y, right) != 0) {
+            id_list[i - 1] = 1;
             touches_border = true;
           }
         }
@@ -159,8 +169,11 @@ public:
 
         // Draw dot and print coordinates for this component
         if (farthest_point.x != -1) {
-          SimpleDetectedObject object =
-              SimpleDetectedObject(farthest_point.x/640.f, 1-farthest_point.y/480.f, 0, i-1);
+          int id;
+          if ()
+            SimpleDetectedObject object = SimpleDetectedObject(
+                farthest_point.x / 640.f, 1 - farthest_point.y / 480.f, 0,
+                id_list[i - 1]);
           hands.push_back(object);
         }
       }
@@ -172,4 +185,7 @@ public:
 private:
   int low_threshold;
   int high_threshold;
+  float input_width;
+  float input_height;
+  float base_height;
 };
