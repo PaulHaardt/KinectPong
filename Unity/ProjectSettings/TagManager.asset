@@ -11,6 +11,7 @@ TagManager:
   - Timer
   - Blue
   - Calibrate
+  - TimerRound
   layers:
   - Default
   - TransparentFX

@@ -13,8 +13,10 @@ public class GameBehaviour : MonoBehaviour
     private Text Text1;
     private Text Text2;
     private Text Timer;
+    private Image TimerRound;
     private GameObject restart;
-    private float targetTime = 30;
+    private float maxTimer = 150;
+    private float targetTime;
     public int RedScore = 0;
     public int BlueScore = 0;
 
@@ -24,10 +26,13 @@ public class GameBehaviour : MonoBehaviour
         Text1 = GameObject.FindGameObjectWithTag("Red").GetComponent<Text>();
         Text2 = GameObject.FindGameObjectWithTag("Blue").GetComponent<Text>();
         Timer = GameObject.FindGameObjectWithTag("Timer").GetComponent<Text>();
+        TimerRound = GameObject.FindGameObjectWithTag("TimerRound").GetComponent<Image>();
         restart = GameObject.FindGameObjectWithTag("Restart");
         Text1.text = "0";
         Text2.text = "0";
-        Timer.text = "2:30";
+        Timer.text = "";
+        TimerRound.fillAmount = 1.0f;
+        targetTime = maxTimer;
         rb = GetComponent<Rigidbody2D>();
         rb.linearVelocity = new Vector3(80,80,0);
     }
@@ -67,12 +72,11 @@ public class GameBehaviour : MonoBehaviour
         if (targetTime <= 0 && !isFrozen)
             Stop();
         else
-            Timer.text = ((int)targetTime / 60) + ":" + ((((int)targetTime % 60) < 10) ? "0" : "") + ((int)targetTime % 60);
+            TimerRound.fillAmount = targetTime / maxTimer;
     }
 
     async void Stop()
     {
-        Debug.Log("HOHOHOHHO");
         isFrozen = true;
 
         if (RedScore > BlueScore)
