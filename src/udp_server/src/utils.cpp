@@ -1,6 +1,43 @@
 #include "utils.hpp"
 
 #include <cmath>
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <map>
+#include <cstdlib>
+
+std::map<std::string, std::string> load_env(const std::string& filename) {
+    std::ifstream file(filename);
+    std::map<std::string, std::string> env_map;
+
+    if (!file.is_open()) {
+        std::cerr << "Could not open .env file\n";
+        return env_map;
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        // Ignore comments and empty lines
+        if (line.empty() || line[0] == '#') continue;
+
+        std::istringstream is_line(line);
+        std::string key;
+        if (std::getline(is_line, key, '=')) {
+            std::string value;
+            if (std::getline(is_line, value)) {
+                env_map[key] = value;
+
+                // Optionally, set it as an environment variable
+                // POSIX only (use `_putenv_s` on Windows)
+                setenv(key.c_str(), value.c_str(), 1);
+            }
+        }
+    }
+
+    return env_map;
+}
 
 std::vector<rgb8> get_cmap(float gamma) {
     std::vector<rgb8> color_map(2048);
