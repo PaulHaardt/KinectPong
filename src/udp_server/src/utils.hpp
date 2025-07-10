@@ -14,3 +14,4 @@ struct rgb8
 
 std::map<std::string, std::string> load_env(const std::string& filename);
 std::vector<rgb8> get_cmap(float gamma = 3.f);
+double getMinFromPointer(uint16_t* values, size_t length);
