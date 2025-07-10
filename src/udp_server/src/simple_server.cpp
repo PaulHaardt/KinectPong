@@ -300,13 +300,8 @@ private:
                 std::cout << "freenect_init() failed" << std::endl;
                 return false;
             }
-<<<<<<< HEAD
 
             freenect_set_log_level(f_ctx_, FREENECT_LOG_DEBUG);
-=======
-            
-            freenect_set_log_level(f_ctx_, FREENECT2_LOG_DEBUG);
->>>>>>> 714ca5d (simple server now uses .env for port and ip)
             freenect_select_subdevices(f_ctx_, (freenect_device_flags)(FREENECT_DEVICE_MOTOR | FREENECT_DEVICE_CAMERA));
 
             int nr_devices = freenect_num_devices(f_ctx_);
@@ -601,30 +596,17 @@ int main(int argc, char *argv[])
 {
     signal(SIGINT, signalHandler);
     signal(SIGTERM, signalHandler);
-<<<<<<< HEAD
-
-    int port = 8888;
-    if (argc > 1)
-    {
-=======
     
     if (argc > 1) {
->>>>>>> 714ca5d (simple server now uses .env for port and ip)
         port = std::atoi(argv[1]);
     }
 
     std::cout << "Simple UDP Object Detection Server" << std::endl;
     std::cout << "Architecture: glview.c style (direct freenect integration)" << std::endl;
     std::cout << "Port: " << port << std::endl;
-<<<<<<< HEAD
-
-    g_server = std::make_unique<SimpleUDPServer>(port);
-
-=======
     
     g_server = std::make_unique<SimpleUDPServer>();
     
->>>>>>> 714ca5d (simple server now uses .env for port and ip)
     // Set static instance for callbacks
     SimpleUDPServer::instance_ = g_server.get();
 

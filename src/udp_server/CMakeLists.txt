@@ -37,6 +37,7 @@ target_link_libraries(calibration PRIVATE Qt6::Gui Qt6::Widgets opencv_kinect)
 
 add_executable(simple_server src/simple_server.cpp)
 add_executable(simple_client src/simple_client.cpp)
+add_executable(utils src/utils.cpp)
 
 target_link_libraries(simple_server PRIVATE 
     ${FREENECT_LIBRARIES}   # Direct freenect (like glview.c)
