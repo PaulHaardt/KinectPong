@@ -1,11 +1,11 @@
 #pragma once
 
 #include <iostream>
+#include <opencv2/calib3d.hpp>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 #include <vector>
 
-// Reuse the same structures from our main server
 struct SimpleDetectedObject {
   float x, y, z;
   int id;
@@ -21,66 +21,58 @@ public:
     high_threshold = 50;
     input_width = 640.0f;
     input_height = 480.0f;
+    homography = cv::Mat::eye(3, 3, CV_64F);
   }
 
-  // Main detection function
+  void setHomography(const cv::Mat &H) {
+    if (H.size() == cv::Size(3, 3)) {
+      H.copyTo(homography);
+    } else {
+      std::cerr << "Invalid homography matrix size!" << std::endl;
+    }
+  }
+
   std::pair<std::vector<SimpleDetectedObject>,
             std::vector<SimpleDetectedObject>>
   detectObjects(const cv::Mat &rgb, const cv::Mat &depth) {
-
     std::vector<SimpleDetectedObject> hands;
     std::vector<SimpleDetectedObject> objects;
 
-    // Handle empty frames gracefully (dummy mode or initialization)
     if (rgb.empty() || depth.empty()) {
       return {hands, objects};
     }
 
-    cv::Mat imgGray; // Result grayscale image
-    // cv::cvtColor(depth, imgGray, cv::COLOR_RGBA2GRAY);
-    imgGray = depth.clone(); // Use depth directly as grayscale
-
+    cv::Mat imgGray = depth.clone();
     cv::Mat depth8, depthEq, mask;
     double minVal, maxVal;
     cv::minMaxLoc(imgGray, &minVal, &maxVal);
 
-    // Avoid divide-by-zero
     if (maxVal - minVal < 1e-6) {
       std::cerr << "Invalid depth range: " << minVal << " - " << maxVal
                 << std::endl;
       return {hands, objects};
     }
 
-    // Normalize to 8-bit
     imgGray.convertTo(depth8, CV_8UC1, 255.0 / (maxVal - minVal),
                       -minVal * 255.0 / (maxVal - minVal));
-
-    // Histogram equalization
     cv::equalizeHist(depth8, depthEq);
-
-    // Threshold to isolate hand and objects (expanded range)
     cv::inRange(depthEq, low_threshold, high_threshold, mask);
 
-    // Improved morphological operations
     cv::Mat kernel =
         cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(20, 20));
-    cv::morphologyEx(mask, mask, cv::MORPH_OPEN, kernel);  // Remove noise
-    cv::morphologyEx(mask, mask, cv::MORPH_CLOSE, kernel); // Fill holes
+    cv::morphologyEx(mask, mask, cv::MORPH_OPEN, kernel);
+    cv::morphologyEx(mask, mask, cv::MORPH_CLOSE, kernel);
 
-    // Filter objects that don't touch the border
     cv::Mat labels, stats, centroids;
     int num_labels =
         cv::connectedComponentsWithStats(mask, labels, stats, centroids);
-
     cv::Mat filtered_mask = cv::Mat::zeros(mask.size(), CV_8UC1);
     int rows = mask.rows;
     int cols = mask.cols;
 
     std::vector<int> id_list;
 
-    // Check each connected component
     for (int i = 1; i < num_labels; i++) {
-      // Get bounding box of the component
       int left = stats.at<int>(i, cv::CC_STAT_LEFT);
       int top = stats.at<int>(i, cv::CC_STAT_TOP);
       int width = stats.at<int>(i, cv::CC_STAT_WIDTH);
@@ -89,39 +81,20 @@ public:
       int bottom = top + height - 1;
 
       id_list.push_back(-1);
-
-      // Check if component touches any border
       bool touches_border = false;
+      cv::Mat component_mask = (labels == i);
 
-      // Check if bounding box touches border
-      if (left == 0 || right == cols - 1 || top == 0 || bottom == rows - 1) {
-        touches_border = true;
-      } else {
-        // More precise check: scan actual pixels at border positions
-        cv::Mat component_mask = (labels == i);
-
-        // Check top and bottom rows
-        // for (int x = left; x <= right && !touches_border; x++) {
-        //  if (component_mask.at<int>(top, x) != 0 ||
-        //      component_mask.at<int>(bottom, x) != 0) {
-        //    touches_border = true;
-        //  }
-        //}
-
-        // Check left and right columns
-        for (int y = top; y <= bottom && !touches_border; y++) {
-          if (component_mask.at<int>(y, left) != 0) {
-            id_list[i - 1] = 0;
-            touches_border = true;
-          }
-          if (component_mask.at<int>(y, right) != 0) {
-            id_list[i - 1] = 1;
-            touches_border = true;
-          }
+      for (int y = top; y <= bottom && !touches_border; y++) {
+        if (component_mask.at<int>(y, left) != 0) {
+          id_list[i - 1] = 0;
+          touches_border = true;
+        }
+        if (component_mask.at<int>(y, right) != 0) {
+          id_list[i - 1] = 1;
+          touches_border = true;
         }
       }
 
-      // Keep only components that touch the border
       if (touches_border) {
         filtered_mask.setTo(255, labels == i);
       }
@@ -131,53 +104,48 @@ public:
     cv::Mat visualization;
     cv::cvtColor(filtered_mask, visualization, cv::COLOR_GRAY2BGR);
 
-    // For each component that touches the border, find its farthest point
     for (int i = 1; i < num_labels; i++) {
-      // Check if this component was kept (touches border)
       cv::Mat component_mask = (labels == i);
-      bool component_kept = false;
-
-      // Quick check if component exists in filtered mask
       cv::Mat component_in_filtered;
       cv::bitwise_and(component_mask, filtered_mask, component_in_filtered);
-      if (cv::countNonZero(component_in_filtered) > 0) {
-        component_kept = true;
-      }
+      if (cv::countNonZero(component_in_filtered) == 0)
+        continue;
 
-      if (component_kept) {
-        cv::Point farthest_point(-1, -1);
-        int max_distance = -1;
+      cv::Point farthest_point(-1, -1);
+      int max_distance = -1;
 
-        // Find all pixels of this component
-        for (int y = 0; y < labels.rows; y++) {
-          for (int x = 0; x < labels.cols; x++) {
-            if (labels.at<int>(y, x) == i) {
-              // Calculate minimum distance to any border
-              int dist_to_left = x;
-              int dist_to_right = (labels.cols - 1) - x;
-
-              int min_border_distance = std::min({dist_to_left, dist_to_right});
-
-              // Keep track of the point farthest from any border
-              if (min_border_distance > max_distance) {
-                max_distance = min_border_distance;
-                farthest_point = cv::Point(x, y);
-              }
+      for (int y = 0; y < labels.rows; y++) {
+        for (int x = 0; x < labels.cols; x++) {
+          if (labels.at<int>(y, x) == i) {
+            int dist_to_left = x;
+            int dist_to_right = (labels.cols - 1) - x;
+            int min_border_distance = std::min({dist_to_left, dist_to_right});
+            if (min_border_distance > max_distance) {
+              max_distance = min_border_distance;
+              farthest_point = cv::Point(x, y);
             }
           }
         }
+      }
 
-        // Draw dot and print coordinates for this component
-        if (farthest_point.x != -1) {
-          int id;
-          if ()
-            SimpleDetectedObject object = SimpleDetectedObject(
-                farthest_point.x / 640.f, 1 - farthest_point.y / 480.f, 0,
-                id_list[i - 1]);
-          hands.push_back(object);
-        }
+      if (farthest_point.x != -1 && homography_loaded) {
+        cv::Scalar color = cv::Scalar(0, 255, 0);
+        cv::circle(visualization, farthest_point, 8, color, -1);
+
+        cv::Mat pt = (cv::Mat_<double>(3, 1) << farthest_point.x / input_width,
+                      farthest_point.y / input_height, 1.0);
+        cv::Mat mapped = homography * pt;
+        float x = mapped.at<double>(0, 0) / mapped.at<double>(2, 0);
+        float y = mapped.at<double>(1, 0) / mapped.at<double>(2, 0);
+        float z = 0; // You could get depth value here if needed
+        int id = id_list[i - 1];
+
+        hands.push_back(SimpleDetectedObject(x, y, z, id));
       }
     }
+
+    cv::imshow("RGB", rgb);
+    cv::imshow("Processed", visualization);
 
     return {hands, objects};
   }
@@ -187,5 +155,6 @@ private:
   int high_threshold;
   float input_width;
   float input_height;
-  float base_height;
+
+  cv::Mat homography;
 };
