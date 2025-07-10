@@ -175,6 +175,15 @@ public:
                     sendto(socket_fd_, ack_msg.c_str(), ack_msg.length(), 0,
                            reinterpret_cast<const sockaddr *>(&client_addr), sizeof(client_addr));
                 }
+                else if (message == "DEPTH_CALIBRATION")
+                {
+                    is_calibrating = true;
+                    std::cout << "Depth calibration started" << std::endl;
+                }
+                else
+                {
+                    std::cout << "Unknown command: " << message << std::endl;
+                }
             }
 
             // std::this_thread::sleep_for(std::chrono::milliseconds(10));
