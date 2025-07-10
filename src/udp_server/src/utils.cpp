@@ -9,6 +9,8 @@
 #include <cstdlib>
 #include <algorithm>
 
+
+
 std::map<std::string, std::string> load_env(const std::string& filename) {
     std::ifstream file(filename);
     std::map<std::string, std::string> env_map;
@@ -83,4 +85,17 @@ double getMinFromPointer(uint16_t* values, size_t length) {
     std::sort(temp.begin(), temp.end());
 
     return temp[0];
+}
+
+void readHomographies(const std::string& filename, cv::Mat& H1, cv::Mat& H2) {
+    cv::FileStorage fs(filename, cv::FileStorage::READ);
+    if (!fs.isOpened()) {
+        std::cerr << "Failed to open YAML file: " << filename << std::endl;
+        return;
+    }
+
+    fs["H1"] >> H1;
+    fs["H2"] >> H2;
+
+    fs.release();
 }

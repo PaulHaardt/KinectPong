@@ -215,6 +215,14 @@ public:
             }
         }
 
+        for (int i = 0; i < 640 * 480; ++i)
+        {
+            if (depth[i] < instance_->threshold)
+            {
+                depth[i] = 2048;
+            }
+        }
+
         instance_->got_depth_ = true;
 
         // Process frame pair if both available

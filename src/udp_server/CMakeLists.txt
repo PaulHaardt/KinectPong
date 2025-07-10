@@ -43,7 +43,7 @@ target_link_libraries(simple_server PRIVATE
     ${OpenCV_LIBS}          # For detection only
     Threads::Threads
 )
-target_link_libraries(simple_client PRIVATE Threads::Threads)
+target_link_libraries(simple_client PRIVATE Threads::Threads ${OpenCV_LIBS})
 
 target_include_directories(simple_server PRIVATE src)
 
