@@ -29,7 +29,7 @@
 #include <cstring>
 #endif
 
-#define IP "UDP_UBUNTU_IP"
+#define IP "UDP_IP_UBUNTU"
 
 struct SimpleDetectionResult
 {
@@ -52,7 +52,7 @@ public:
         auto env = load_env(".env");
         port_ = std::stoi(env["UDP_SERVER_PORT"]);
         ip_ = env[IP];
-        std::cout << "Port: " << port_ << std::endl;
+        std::cout << "Port: " << port_ << "IP: " << ip_ << std::endl;
     }
 
     ~SimpleUDPServer()
@@ -278,7 +278,7 @@ private:
 
         memset(&server_addr_, 0, sizeof(server_addr_));
         server_addr_.sin_family = AF_INET;
-        server_addr_.sin_addr.s_addr = inet_addr("127.0.0.1");
+        server_addr_.sin_addr.s_addr = inet_addr(ip_.c_str());
         server_addr_.sin_port = htons(port_);
 
         if (bind(socket_fd_, reinterpret_cast<sockaddr *>(&server_addr_), sizeof(server_addr_)) < 0)
