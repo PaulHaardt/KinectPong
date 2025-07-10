@@ -1,3 +1,4 @@
+#include "utils.hpp"
 #include <iostream>
 #include <string>
 #include <chrono>
@@ -19,12 +20,7 @@
 
 class SimpleUDPClient {
 public:
-<<<<<<< HEAD
-    SimpleUDPClient(const std::string& server_ip = "172.22.181.115", int server_port = 8888)
-        : server_ip_(server_ip), server_port_(server_port), socket_fd_(-1) {
-=======
     SimpleUDPClient() : socket_fd_(-1) {
->>>>>>> 714ca5d (simple server now uses .env for port and ip)
 #ifdef _WIN32
         WSADATA wsaData;
         WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -32,6 +28,7 @@ public:
         auto env = load_env(".env");
         server_port_ = std::stoi(env["UDP_SERVER_PORT"]);
         server_ip_ = env["UDP_IP_UBUNTU"];
+        std::cout << "Connecting to: " << server_ip_ << ":" << server_port_ << std::endl;
     }
     
     ~SimpleUDPClient() {
@@ -163,15 +160,7 @@ int main(int argc, char* argv[]) {
     signal(SIGINT, signalHandler);
     signal(SIGTERM, signalHandler);
     
-    if (argc > 1) {
-        server_ip = argv[1];
-    }
-    if (argc > 2) {
-        server_port = std::atoi(argv[2]);
-    }
-    
     std::cout << "Simple UDP Test Client" << std::endl;
-    std::cout << "Connecting to: " << server_ip << ":" << server_port << std::endl;
     
     g_client = std::make_unique<SimpleUDPClient>();
     
