@@ -51,6 +51,8 @@ public:
 
         auto env = load_env(".env");
         port_ = std::stoi(env["UDP_SERVER_PORT"]);
+        is_calibrating = true;
+        threshold = 2048.0f;
         ip_ = env[IP];
         std::cout << "Port: " << port_ << "IP: " << ip_ << std::endl;
     }
@@ -192,7 +194,18 @@ public:
 
         // Simple copy for now (glview.c does color mapping here)
         memcpy(instance_->depth_mid_, depth, 640 * 480 * sizeof(uint16_t));
-        std::cout << depth_mid_ << std::endl;
+        if (is_calibrating) {
+            float min = getMinFromPointer(depth, 640 * 480);
+            min_per_frame.push_back(min);
+
+            if (min_per_frame.size == 10) {
+                is_calibrating = false;
+                float median = (min_per_frame[4] + min_per_frame[5]) / 2.0;
+                threshold = median;
+                min_per_frame.clear();
+            }
+        }
+
         instance_->got_depth_ = true;
 
         // Process frame pair if both available
@@ -552,6 +565,9 @@ private:
     int port_;
     std::string ip_;
     int socket_fd_;
+    std::vector<float> min_per_frame;
+    float threshold;
+    bool is_calibrating;
     sockaddr_in server_addr_;
     sockaddr_in client_addr_;
     std::atomic<bool> running_{false};
