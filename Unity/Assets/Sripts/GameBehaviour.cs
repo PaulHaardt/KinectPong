@@ -29,7 +29,7 @@ public class GameBehaviour : MonoBehaviour
         Text2.text = "0";
         Timer.text = "2:30";
         rb = GetComponent<Rigidbody2D>();
-        rb.linearVelocity = new Vector3(50,50,0);
+        rb.linearVelocity = new Vector3(80,80,0);
     }
 
     // Update is called once per frame
@@ -45,19 +45,19 @@ public class GameBehaviour : MonoBehaviour
             float y = rb.linearVelocity.y;
             if (x < 0)
             {
-                x = Mathf.Clamp(x, -300, -20);
+                x = Mathf.Clamp(x, -500, -50);
             }
             else
             {
-                x = Mathf.Clamp(x, 20, 300);
+                x = Mathf.Clamp(x, 50, 500);
             }
             if (y < 0)
             {
-                y = Mathf.Clamp(y, -300, -20);
+                y = Mathf.Clamp(y, -500, -50);
             }
             else
             {
-                y = Mathf.Clamp(y, 20, 300);
+                y = Mathf.Clamp(y, 50, 500);
             }
             rb.linearVelocity = new Vector3(x, y, 0);
         }
@@ -95,23 +95,23 @@ public class GameBehaviour : MonoBehaviour
     {
         if (collider.gameObject.tag == "Left")
         {
-            transform.position = new Vector3(160,120,0);
+            transform.position = new Vector3(Screen.width/2,Screen.height/2,0);
             isFrozen = true;
             BlueScore++;
             Text2.text = RedScore + "";
             await Task.Delay(1000);
             isFrozen = false;
-            rb.linearVelocity = new Vector3(50,50,0);
+            rb.linearVelocity = new Vector3(80,80,0);
         }
         if (collider.gameObject.tag == "Right")
         {
-            transform.position = new Vector3(160,120,0);
+            transform.position = new Vector3(Screen.width/2,Screen.height/2,0);
             isFrozen = true;
             RedScore++;
             Text1.text = BlueScore + "";
             await Task.Delay(1000);
             isFrozen = false;
-            rb.linearVelocity = new Vector3(-50,-50,0);
+            rb.linearVelocity = new Vector3(-80,-80,0);
 
         }
     }

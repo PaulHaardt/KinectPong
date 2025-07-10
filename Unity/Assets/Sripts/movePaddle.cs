@@ -15,7 +15,7 @@ public class movePaddle : MonoBehaviour
 
     void Start()
     {
-        originY = paddles[0].transform.position.y;
+        originY = Screen.height/2;
         
         // Get canvas dimensions
         RectTransform canvasRect = canvas.GetComponent<RectTransform>();
@@ -27,8 +27,8 @@ public class movePaddle : MonoBehaviour
                       paddles[0].GetComponent<Collider2D>().bounds.size.y;
         
         // Calculate limits with paddle height consideration
-        topLimit = originY + (canvasHeight / 2) - (paddleHeight / 2);
-        bottomLimit = originY - (canvasHeight / 2) + (paddleHeight / 2);
+        topLimit = originY + (Screen.height / 2) - (paddleHeight / 2);
+        bottomLimit = originY - (Screen.height / 2) + (paddleHeight / 2);
         
         // Normalize speed based on canvas height (reference height = 200)
         normalizedSpeed = speed * (canvasHeight / 200f);
