@@ -35,7 +35,8 @@ public:
     }
 
     cv::Mat imgGray; // Result grayscale image
-    cv::cvtColor(depth, imgGray, cv::COLOR_RGBA2GRAY);
+    // cv::cvtColor(depth, imgGray, cv::COLOR_RGBA2GRAY);
+    imgGray = depth.clone(); // Use depth directly as grayscale
 
     cv::Mat depth8, depthEq, mask;
     double minVal, maxVal;
@@ -159,7 +160,7 @@ public:
         // Draw dot and print coordinates for this component
         if (farthest_point.x != -1) {
           SimpleDetectedObject object =
-              SimpleDetectedObject(farthest_point.x, farthest_point.y, 0, i);
+              SimpleDetectedObject(farthest_point.x/640.f, 1-farthest_point.y/480.f, 0, i-1);
           hands.push_back(object);
         }
       }
