@@ -1,3 +1,4 @@
+#include "utils.hpp"
 #include <iostream>
 #include <string>
 #include <thread>
@@ -28,6 +29,8 @@
 #include <cstring>
 #endif
 
+#define IP "UDP_UBUNTU_IP"
+
 struct SimpleDetectionResult
 {
     std::vector<SimpleDetectedObject> hands;
@@ -47,7 +50,9 @@ public:
 #endif
 
         auto env = load_env(".env");
-        port = std::stoi(env["UDP_SERVER_PORT"])
+        port_ = std::stoi(env["UDP_SERVER_PORT"]);
+        ip_ = env[IP];
+        std::cout << "Port: " << port_ << std::endl;
     }
 
     ~SimpleUDPServer()
@@ -273,7 +278,7 @@ private:
 
         memset(&server_addr_, 0, sizeof(server_addr_));
         server_addr_.sin_family = AF_INET;
-        server_addr_.sin_addr.s_addr = inet_addr("172.22.181.115");
+        server_addr_.sin_addr.s_addr = inet_addr("127.0.0.1");
         server_addr_.sin_port = htons(port_);
 
         if (bind(socket_fd_, reinterpret_cast<sockaddr *>(&server_addr_), sizeof(server_addr_)) < 0)
@@ -546,6 +551,7 @@ private:
 
     // Network members
     int port_;
+    std::string ip_;
     int socket_fd_;
     sockaddr_in server_addr_;
     sockaddr_in client_addr_;
@@ -598,12 +604,11 @@ int main(int argc, char *argv[])
     signal(SIGTERM, signalHandler);
     
     if (argc > 1) {
-        port = std::atoi(argv[1]);
+        int port = std::atoi(argv[1]);
     }
 
     std::cout << "Simple UDP Object Detection Server" << std::endl;
     std::cout << "Architecture: glview.c style (direct freenect integration)" << std::endl;
-    std::cout << "Port: " << port << std::endl;
     
     g_server = std::make_unique<SimpleUDPServer>();
     
@@ -612,7 +617,7 @@ int main(int argc, char *argv[])
 
     if (!g_server->start())
     {
-        std::cerr << "Failed to start server" << std::endl;
+        std::cerr << "Failed to start server at ip " << std::endl;
         return 1;
     }
 
