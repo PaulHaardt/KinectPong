@@ -192,6 +192,7 @@ public:
 
         // Simple copy for now (glview.c does color mapping here)
         memcpy(instance_->depth_mid_, depth, 640 * 480 * sizeof(uint16_t));
+        std::cout << depth_mid_ << std::endl;
         instance_->got_depth_ = true;
 
         // Process frame pair if both available
