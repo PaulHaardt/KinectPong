@@ -381,14 +381,12 @@ private:
         // Start freenect thread exactly like glview.c freenect_threadfunc
         kinect_thread_ = std::thread([this]()
                                      {
-            std::cout << "🔄 Starting Kinect thread (glview.c freenect_threadfunc style)" << std::endl;
+            std::cout << "Starting Kinect thread (glview.c freenect_threadfunc style)" << std::endl;
             
             while (!die_ && freenect_process_events(f_ctx_) >= 0) {
-                // Tight loop like glview.c - NO sleep!
-                // This is the key difference from our previous approach
             }
             
-            std::cout << "🔄 Kinect thread stopped" << std::endl; });
+            std::cout << "Kinect thread stopped" << std::endl; });
     }
 
     void cleanupKinect()

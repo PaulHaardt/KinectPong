@@ -28,8 +28,21 @@ public:
         WSAStartup(MAKEWORD(2, 2), &wsaData);
 #endif
         auto env = load_env(".env");
-        server_port_ = std::stoi(env["UDP_SERVER_PORT"]);
-        server_ip_ = env[IP];
+        // Default values
+        server_ip_ = "127.0.0.1";
+        server_port_ = 8888;
+        
+        if (env.find("UDP_SERVER_PORT") != env.end()) {
+            server_port_ = std::stoi(env["UDP_SERVER_PORT"]);
+        } else {
+            std::cerr << "Warning: UDP_SERVER_PORT not found in .env, using default port " << server_port_ << std::endl;
+        }
+        
+        if (env.find(IP) != env.end()) {
+            server_ip_ = env[IP];
+        } else {
+            std::cerr << "Warning: " << IP << " not found in .env, using default IP " << server_ip_ << std::endl;
+        }
         std::cout << "Connecting to: " << server_ip_ << ":" << server_port_ << std::endl;
     }
     
