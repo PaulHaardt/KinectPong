@@ -10,7 +10,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
 find_package(libfreenect REQUIRED)
 find_package(GLUT REQUIRED)
 find_package(OpenGL REQUIRED)
-find_package(OpenCV REQUIRED COMPONENTS core highgui imgproc calib3d imgcodecs)
+find_package(OpenCV REQUIRED COMPONENTS core highgui imgproc calib3d imgcodecs opencv)
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
 
 

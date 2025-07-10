@@ -147,6 +147,7 @@ public:
 
     cv::imshow("RGB", rgb);
     cv::imshow("Processed", visualization);
+    cv::waitKey(1);
 
     return {hands, objects};
   }
