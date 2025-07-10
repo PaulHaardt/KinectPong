@@ -7,6 +7,7 @@
 #include <string>
 #include <map>
 #include <cstdlib>
+#include <algorithm>
 
 std::map<std::string, std::string> load_env(const std::string& filename) {
     std::ifstream file(filename);

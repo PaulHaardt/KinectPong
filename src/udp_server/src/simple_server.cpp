@@ -203,15 +203,15 @@ public:
 
         // Simple copy for now (glview.c does color mapping here)
         memcpy(instance_->depth_mid_, depth, 640 * 480 * sizeof(uint16_t));
-        if (is_calibrating) {
+        if (instance_->is_calibrating) {
             float min = getMinFromPointer(depth, 640 * 480);
-            min_per_frame.push_back(min);
+            instance_->min_per_frame.push_back(min);
 
-            if (min_per_frame.size == 10) {
-                is_calibrating = false;
-                float median = (min_per_frame[4] + min_per_frame[5]) / 2.0;
-                threshold = median;
-                min_per_frame.clear();
+            if (instance_->min_per_frame.size() == 10) {
+                instance_->is_calibrating = false;
+                float median = (instance_->min_per_frame[4] + instance_->min_per_frame[5]) / 2.0;
+                instance_->threshold = median;
+                instance_->min_per_frame.clear();
             }
         }
 
