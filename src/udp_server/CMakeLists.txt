@@ -10,7 +10,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
 find_package(libfreenect REQUIRED)
 find_package(GLUT REQUIRED)
 find_package(OpenGL REQUIRED)
-find_package(OpenCV REQUIRED COMPONENTS core highgui imgproc calib3d imgcodecs opencv)
+find_package(OpenCV REQUIRED)
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
 
 
@@ -40,8 +40,7 @@ add_executable(simple_client src/simple_client.cpp src/utils.cpp)
 
 target_link_libraries(simple_server PRIVATE 
     ${FREENECT_LIBRARIES}   # Direct freenect (like glview.c)
-    opencv_imgproc          # For detection only
-    opencv_core             # For cv::Mat
+    ${OpenCV_LIBS}          # For detection only
     Threads::Threads
 )
 target_link_libraries(simple_client PRIVATE Threads::Threads)
