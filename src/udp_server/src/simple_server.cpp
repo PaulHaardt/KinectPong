@@ -307,7 +307,7 @@ public:
         std::vector<SimpleDetectedObject> filtered_hands;
         for (const auto& pair : lowest_depth_hands) {
             auto hand = pair.second;
-            std::cout << "x : " << hand.x * 640 << ", y: " << hand.y << ", id: " << hand.id << std::endl; 
+            //std::cout << "x : " << hand.x * 640 << ", y: " << hand.y * 480 << ", id: " << hand.id << std::endl; 
             filtered_hands.push_back(pair.second);
         }
 
