@@ -553,53 +553,26 @@ private:
         //     0,
         //     1);
 
-        // First hand moves along the perimeter
-        float t1 = counter * 0.5f;
-        float x1, y1;
+        // Generate a random value between -range and +range
+        auto randomOffset = [](float range) -> float {
+            return ((float)rand() / RAND_MAX * 2.0f - 1.0f) * range;
+        };
+
+        // Create a smooth up and down motion using sin function
+        float yTrajectory = 0.5f + 0.3f * std::sin(counter);
         
-        if (t1 <= 1.0f) {
-            // Top edge: left to right
-            x1 = t1;
-            y1 = 0.0f;
-        } else if (t1 <= 2.0f) {
-            // Right edge: top to bottom
-            x1 = 1.0f;
-            y1 = t1 - 1.0f;
-        } else if (t1 <= 3.0f) {
-            // Bottom edge: right to left
-            x1 = 3.0f - t1;
-            y1 = 1.0f;
-        } else {
-            // Left edge: bottom to top
-            x1 = 0.0f;
-            y1 = 4.0f - t1;
-            if (t1 > 4.0f) {
-            counter -= 8.0f; // Reset counter to loop
-            }
-        }
-        
-        // Second hand moves in the opposite direction
-        float t2 = counter * 0.5f + 4.0f; // Offset by half the path
-        float x2, y2;
-        
-        if (t2 > 8.0f) t2 -= 8.0f; // Keep in range
-        
-        if (t2 <= 1.0f) {
-            x2 = t2;
-            y2 = 0.0f;
-        } else if (t2 <= 2.0f) {
-            x2 = 1.0f;
-            y2 = t2 - 1.0f;
-        } else if (t2 <= 3.0f) {
-            x2 = 3.0f - t2;
-            y2 = 1.0f;
-        } else {
-            x2 = 0.0f;
-            y2 = 4.0f - t2;
-        }
-        
-        result.hands.emplace_back(x1, y1, 0, 0);
-        result.hands.emplace_back(x2, y2, 0, 1);
+        // Noise factor (20%)
+        const float noiseFactor = 0.2f;
+
+        // Left hand with trajectory + noise
+        float leftHandX = 0.1f + randomOffset(0.1f);  // Random within 0-20% of width
+        float leftHandY = (1.0f - noiseFactor) * yTrajectory + noiseFactor * (0.5f + randomOffset(0.2f));
+        result.hands.emplace_back(leftHandX, leftHandY, 0, 0);
+
+        // Right hand with trajectory + noise
+        float rightHandX = 0.9f + randomOffset(0.1f);  // Random within 80-100% of width
+        float rightHandY = (1.0f - noiseFactor) * yTrajectory + noiseFactor * (0.5f + randomOffset(0.2f));
+        result.hands.emplace_back(rightHandX, rightHandY, 0, 1);
 
         // Dummy objects
         result.objects.emplace_back(0.2f, 0.5f, 0.85f, 1);

@@ -408,10 +408,26 @@ namespace Sripts
         {
             if (leftPaddle)
             {
-                Vector3 leftPos = leftPaddle.position;
-                    GameObject leftArtefact = Instantiate(coordArtefactPrefab, leftPos, Quaternion.identity);
+                Vector3 pos = new Vector3(
+                    leftHandPos.x * canvasRect.rect.width,
+                    leftHandPos.y * canvasRect.rect.height
+                );
+                
+                    GameObject leftArtefact = Instantiate(coordArtefactPrefab, pos, Quaternion.identity);
                     leftArtefact.transform.SetParent(canvasRect, true);
                     leftArtefact.transform.SetSiblingIndex(0);
+            }
+            
+            if (rightPaddle)
+            {
+                Vector3 pos = new Vector3(
+                    rightHandPos.x * canvasRect.rect.width,
+                    rightHandPos.y * canvasRect.rect.height
+                );
+                
+                    GameObject rightArtefact = Instantiate(coordArtefactPrefab, pos, Quaternion.identity);
+                    rightArtefact.transform.SetParent(canvasRect, true);
+                    rightArtefact.transform.SetSiblingIndex(0);
             }
         }
 
