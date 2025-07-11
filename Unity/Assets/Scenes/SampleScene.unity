@@ -686,8 +686,8 @@ MonoBehaviour:
   RightCoordinateLogger: {fileID: 856981296}
   rawJSONLogger: {fileID: 363324648}
   xMovementScale: 1
-  smoothingFactor: 0.8
-  averageFrames: 5
+  smoothingFactor: 0.1
+  averageFrames: 15
 --- !u!1 &522455290
 GameObject:
   m_ObjectHideFlags: 0
