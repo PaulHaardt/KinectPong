@@ -219,10 +219,11 @@ public:
             float min = getMinFromPointer(depth, 640 * 480);
             instance_->min_per_frame.push_back(min);
 
-            if (instance_->min_per_frame.size() == 10) {
+            if (instance_->min_per_frame.size() == 50) {
                 instance_->is_calibrating = false;
-                float median = (instance_->min_per_frame[4] + instance_->min_per_frame[5]) / 2.0;
-                instance_->threshold = median;
+                std :: sort(instance_->min_per_frame.begin(),instance_->min_per_frame.end());
+                //float min = (instance_->min_per_frame[4] + instance_->min_per_frame[5]) / 2.0;
+                instance_->threshold = instance_->min_per_frame[0];
                 instance_->min_per_frame.clear();
             }
         }
@@ -290,7 +291,7 @@ public:
         // Reset flags
         got_rgb_ = false;
         got_depth_ = false;
-
+        //std::cout << instance_->threshold << " messages sent" << std::endl;
         // Debug
         static int frame_count = 0;
         frame_count++;
