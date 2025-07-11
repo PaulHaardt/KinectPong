@@ -19,7 +19,7 @@ class SimpleDetector {
 public:
   SimpleDetector() {
     low_threshold = 0;
-    high_threshold = 50;
+    high_threshold = 40;
     input_width = 640.0f;
     input_height = 480.0f;
     homography = cv::Mat::eye(3, 3, CV_64F);
@@ -61,8 +61,8 @@ public:
 
     cv::Mat kernel =
         cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(20, 20));
+        cv::morphologyEx(mask, mask, cv::MORPH_CLOSE, kernel);
     cv::morphologyEx(mask, mask, cv::MORPH_OPEN, kernel);
-    cv::morphologyEx(mask, mask, cv::MORPH_CLOSE, kernel);
 
     cv::Mat labels, stats, centroids;
     int num_labels =
@@ -134,7 +134,7 @@ public:
         cv::circle(visualization, farthest_point, 8, color, -1);
 
         cv::Mat pt = (cv::Mat_<double>(3, 1) << farthest_point.x / input_width,
-                      farthest_point.y / input_height, 1.0);
+                      1 - farthest_point.y / input_height, 1.0);
         cv::Mat mapped = homography * pt;
         float x = mapped.at<double>(0, 0) / mapped.at<double>(2, 0);
         float y = mapped.at<double>(1, 0) / mapped.at<double>(2, 0);
@@ -147,6 +147,7 @@ public:
 
     cv::imshow("RGB", rgb);
     cv::imshow("Processed", visualization);
+    cv::imshow("Depth", depthEq);
     cv::waitKey(1);
 
     return {hands, objects};
