@@ -13,6 +13,7 @@
 // Direct freenect integration (like glview.c)
 #include <libfreenect/libfreenect.h>
 #include <opencv2/core.hpp>
+#include <utility>
 
 // Detection
 #include "simple_detector.hpp"
@@ -281,7 +282,7 @@ public:
 
         // Process with detection
         SimpleDetectionResult result = processFrames(rgb_clone, depth_clone, our_timestamp);
-        auto hands = result.first;
+        auto hands = result.hands;
 
         // Map to store the hand with lowest depth for each ID
         std::map<int, SimpleDetectedObject> lowest_depth_hands;
@@ -292,11 +293,13 @@ public:
             int pixel_y = static_cast<int>(hand.y * 480);
     
             // Get depth value at hand position
-            uint16_t depth_value = depth[pixel_y * depth_width + pixel_x];
+            int depth_width = 640;
+            int depth_height = 480;
+            uint16_t depth_value = depth_mid_[pixel_y * depth_width + pixel_x];
     
             // Check if this is the first hand with this ID or has lower depth
             auto it = lowest_depth_hands.find(hand.id);
-            if (it == lowest_depth_hands.end() || depth_value < depth[static_cast<int>(it->second.y) * depth_width + static_cast<int>(it->second.x)]) {
+            if (it == lowest_depth_hands.end() || depth_value < depth_mid_[static_cast<int>(it->second.y) * depth_width + static_cast<int>(it->second.x)]) {
                 lowest_depth_hands[hand.id] = hand;
             }
         }
@@ -306,7 +309,7 @@ public:
             filtered_hands.push_back(pair.second);
         }
 
-        result = {filtered_hands, result.second};
+        result.hands = filtered_hands;
 
         // Broadcast to client
         if (has_client_)

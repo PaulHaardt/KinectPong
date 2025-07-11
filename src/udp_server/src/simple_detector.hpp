@@ -11,6 +11,9 @@ struct SimpleDetectedObject {
   float x, y, z;
   int id;
 
+  SimpleDetectedObject() : x(0.0f), y(0.0f), z(0.0f), id(-1) {}
+
+
   SimpleDetectedObject(float x_, float y_, float z_, int id_)
       : x(x_), y(y_), z(z_), id(id_) {}
 };
@@ -140,8 +143,8 @@ public:
         float y = mapped.at<double>(1, 0) / mapped.at<double>(2, 0);
         float z = 0; // You could get depth value here if needed
         int id = id_list[i - 1];
-
-        hands.push_back(SimpleDetectedObject(x, y, z, id));
+        std::cout << x << " " << y << " " << z << " " << id << std::endl;
+        hands.push_back(SimpleDetectedObject(x, 1 - y, z, id));
       }
     }
 
