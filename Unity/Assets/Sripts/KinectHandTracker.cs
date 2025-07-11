@@ -43,7 +43,7 @@ namespace Sripts
         public float xMovementScale = 1.0f; // 1m movement range
     
         [Header("Smoothing")]
-        public float smoothingFactor = 0.8f;
+        public float smoothingFactor = 0.9f;
         [Range(1, 50), Tooltip("Average Frames")] public int averageFrames = 5;
         private UdpClient udpClient;
         private Thread udpThread;
@@ -345,8 +345,8 @@ namespace Sripts
             Vector2 rightMedian = new Vector2(Median(rightX), Median(rightY));
 
             // Combine both smoothing methods
-            smoothedLeftPos = Vector2.Lerp(smoothedLeftPos, leftMedian, 0.3f);
-            smoothedRightPos = Vector2.Lerp(smoothedRightPos, rightMedian, 0.3f);
+            smoothedLeftPos = Vector2.Lerp(smoothedLeftPos, leftMedian, smoothingFactor);
+            smoothedRightPos = Vector2.Lerp(smoothedRightPos, rightMedian, smoothingFactor);
             return;
 
             float Median(float[] arr)
