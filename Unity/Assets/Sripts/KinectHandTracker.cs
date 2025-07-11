@@ -192,6 +192,12 @@ namespace Sripts
             
             IPEndPoint serverEndPoint = new IPEndPoint(serverAddress, serverPort);
             IPEndPoint remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
+            
+            if (!File.Exists("log.txt"))
+            {
+                File.WriteAllText("log.txt", $"[{DateTime.Now}] Log file created.\n");
+            }
+            File.AppendAllText("log.txt", $"[{DateTime.Now}] UDP Client started on local port {clientPort}, connecting to server {serverIP}:{serverPort}\n");
 
             // Send SUBSCRIBE message to server
             try
@@ -353,8 +359,8 @@ namespace Sripts
             // Calculate clamp limits to prevent clipping
             float yClampMax = (canvasHeight) - (paddleHeight / 2);
             float yClampMin = (paddleHeight / 2);
-    
-            float xClampMax = (canvasWidth) - (paddleWidth / 2);
+
+            float xClampMax = (canvasWidth);
             float xClampMin = (paddleWidth / 2);
     
             if (leftPaddle)
