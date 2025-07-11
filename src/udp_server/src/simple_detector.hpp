@@ -28,7 +28,10 @@ public:
         homography = cv::Mat::eye(3, 3, CV_64F);
         cv::Mat h2 = cv::Mat::eye(3, 3, CV_64F);
 
-        readHomographies("../calibration.yml", homography, h2);
+        readHomographies("calibration.yml", homography, h2);
+        // prints the homography matrix
+        std::cout << "Homography matrix: " << std::endl;
+        std::cout << homography << std::endl;
     }
 
     void setHomography(const cv::Mat &H) {
@@ -147,7 +150,15 @@ public:
 
             if (farthest_point.x != -1) {
                 cv::Scalar color = cv::Scalar(0, 255, 0);
-                cv::circle(visualization, farthest_point, 8, color, -1);
+
+                // Apply homography to farthest_point
+                std::cout << farthest_point << std::endl;
+                std::vector<cv::Point2f> input_pts = {cv::Point2f(farthest_point.x, farthest_point.y)};
+                std::vector<cv::Point2f> output_pts;
+                cv::perspectiveTransform(input_pts, output_pts, homography);
+                std::cout << "Transformed point: " << output_pts[0] << std::endl;
+                cv::Point2f transformed_point = output_pts[0];
+                cv::circle(visualization, output_pts[0], 8, color, -1);
 
                 cv::Mat pt = (cv::Mat_<double>(3, 1) << farthest_point.x / input_width,
                               1 - farthest_point.y / input_height, 1.0);
@@ -155,7 +166,6 @@ public:
                 float y = pt.at<double>(1, 0) / pt.at<double>(2, 0);
                 float z = 0;// You could get depth value here if needed
                 int id = id_list[i - 1];
-                std::cout << x << " " << y << " " << z << " " << id << std::endl;
 
                 cv::Point2f input(x, y);
                 cv::Point2f output;
