@@ -29,7 +29,8 @@
 #include <cstring>
 #endif
 
-#define IP "UDP_IP_UBUNTU"
+#define UDP_IP_UBUNTU "UDP_IP_UBUNTU"
+#define UDP_IP_WSL "UDP_IP_WSL"
 
 struct SimpleDetectionResult
 {
@@ -53,7 +54,18 @@ public:
         port_ = std::stoi(env["UDP_SERVER_PORT"]);
         is_calibrating = true;
         threshold = 2048.0f;
-        ip_ = env[IP];
+        if (env.find(UDP_IP_UBUNTU) != env.end())
+        {
+            ip_ = env[UDP_IP_UBUNTU];
+        }
+        else if (env.find(UDP_IP_WSL) != env.end())
+        {
+            ip_ = env[UDP_IP_WSL];
+        }
+        else
+        {
+            ip_ = "127.0.0.1"; 
+        }
         std::cout << "Port: " << port_ << "IP: " << ip_ << std::endl;
     }
 

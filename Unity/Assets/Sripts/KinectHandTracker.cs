@@ -8,6 +8,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using File = System.IO.File;
+using UnityEditor;
 
 namespace Sripts
 {
@@ -15,13 +16,15 @@ namespace Sripts
     {
         private int serverPort = 8888;
         private int clientPort = 8000;
-        private string serverIP = "127.0.0.1";
+        private string serverIP = "172.22.181.115";
         
         [Header("Paddle References")]
         public Transform leftPaddle;
         public Transform rightPaddle;
-        public Transform leftLimit;
-        public Transform rightLimit;
+        
+        [Header("Limits")]
+        public RectTransform leftLimit;
+        public RectTransform rightLimit;
         
         public RectTransform blueText;
         public RectTransform redText;
@@ -41,8 +44,7 @@ namespace Sripts
     
         [Header("Smoothing")]
         public float smoothingFactor = 0.8f;
-        public int averageFrames = 5;
-    
+        [Range(1, 20), Tooltip("Average Frames")] public int averageFrames = 5;
         private UdpClient udpClient;
         private Thread udpThread;
         private bool isReceiving = false;
@@ -91,8 +93,6 @@ namespace Sripts
             InitializeNetwork();
             leftPaddleRect = leftPaddle.GetComponent<RectTransform>();
             rightPaddleRect = rightPaddle.GetComponent<RectTransform>();
-            leftLimit.position = new Vector3(canvasRect.rect.width / 4, canvasRect.rect.height, 0);
-            rightLimit.position = new Vector3(canvasRect.rect.width / 4 * 3, canvasRect.rect.height, 0);
 
             blueText.position = new Vector3(canvasRect.rect.width / 8, canvasRect.rect.height / 2, 0);
             blueText.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal,  canvasRect.rect.height / 2);
@@ -312,22 +312,32 @@ namespace Sripts
             smoothedLeftPos = Vector2.Lerp(smoothedLeftPos, leftHandPos, 1.0f - smoothingFactor);
             smoothedRightPos = Vector2.Lerp(smoothedRightPos, rightHandPos, 1.0f - smoothingFactor);
         
-            // Additional averaging smoothing
-            Vector2 leftAverage = Vector2.zero;
-            Vector2 rightAverage = Vector2.zero;
-        
-            for (int i = 0; i < averageFrames; i++)
-            {
-                leftAverage += leftHandHistory[i];
-                rightAverage += rightHandHistory[i];
-            }
-        
-            leftAverage /= averageFrames;
-            rightAverage /= averageFrames;
-        
+            // Temporal median smoothing (efficient selection)
+            Vector2[] leftHistoryCopy = new Vector2[averageFrames];
+            Vector2[] rightHistoryCopy = new Vector2[averageFrames];
+            Array.Copy(leftHandHistory, leftHistoryCopy, averageFrames);
+            Array.Copy(rightHandHistory, rightHistoryCopy, averageFrames);
+
+            float[] leftX = leftHistoryCopy.Select(v => v.x).ToArray();
+            float[] leftY = leftHistoryCopy.Select(v => v.y).ToArray();
+            float[] rightX = rightHistoryCopy.Select(v => v.x).ToArray();
+            float[] rightY = rightHistoryCopy.Select(v => v.y).ToArray();
+
+            Vector2 leftMedian = new Vector2(Median(leftX), Median(leftY));
+            Vector2 rightMedian = new Vector2(Median(rightX), Median(rightY));
+
             // Combine both smoothing methods
-            smoothedLeftPos = Vector2.Lerp(smoothedLeftPos, leftAverage, 0.3f);
-            smoothedRightPos = Vector2.Lerp(smoothedRightPos, rightAverage, 0.3f);
+            smoothedLeftPos = Vector2.Lerp(smoothedLeftPos, leftMedian, 0.3f);
+            smoothedRightPos = Vector2.Lerp(smoothedRightPos, rightMedian, 0.3f);
+            return;
+
+            float Median(float[] arr)
+            {
+                int n = arr.Length;
+                Array.Sort(arr);
+                if (n % 2 == 1) return arr[n / 2];
+                return (arr[(n / 2) - 1] + arr[n / 2]) / 2f;
+            }
         }
 
         private void MovePaddles()
@@ -345,8 +355,6 @@ namespace Sripts
             float yClampMin = (paddleHeight / 2);
     
             float xClampMax = (canvasWidth) - (paddleWidth / 2);
-            float xLeftMax = (leftLimit.position.x) - (paddleWidth / 2);
-            float xRightMin = (rightLimit.position.x) + (paddleWidth / 2);
             float xClampMin = (paddleWidth / 2);
     
             if (leftPaddle)
@@ -357,7 +365,8 @@ namespace Sripts
                 leftPos.y = Mathf.Lerp(yClampMin, yClampMax, normalizedY);
         
                 float normalizedX = Mathf.Clamp01(smoothedLeftPos.x);
-                leftPos.x = Mathf.Lerp(xClampMin, xLeftMax, normalizedX) * xMovementScale;
+                leftPos.x = Mathf.Lerp(xClampMin, xClampMax, normalizedX) * xMovementScale;
+                leftPos.x = Mathf.Clamp(leftPos.x, xClampMin, leftLimit.position.x);
         
                 leftPaddle.position = leftPos;
             }
@@ -370,7 +379,8 @@ namespace Sripts
                 rightPos.y = Mathf.Lerp(yClampMin, yClampMax, normalizedY);
         
                 float normalizedX = Mathf.Clamp01(smoothedRightPos.x);
-                rightPos.x = Mathf.Lerp(xRightMin, xClampMax, normalizedX) * xMovementScale;
+                rightPos.x = Mathf.Lerp(xClampMin, xClampMax, normalizedX) * xMovementScale;
+                rightPos.x = Mathf.Clamp(rightPos.x, rightLimit.position.x, xClampMax);
         
                 rightPaddle.position = rightPos;
             }
