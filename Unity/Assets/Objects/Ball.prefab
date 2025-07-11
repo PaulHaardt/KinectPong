@@ -114,7 +114,7 @@ CircleCollider2D:
   m_CompositeOperation: 0
   m_CompositeOrder: 0
   m_Offset: {x: 0, y: 0}
-  m_Radius: 2
+  m_Radius: 22
 --- !u!50 &2372109455644390114
 Rigidbody2D:
   serializedVersion: 5
@@ -157,6 +157,8 @@ MonoBehaviour:
   rb: {fileID: 0}
   RedScore: 0
   BlueScore: 0
+  minSpeed: 100
+  maxSpeed: 300
 --- !u!96 &-4277690309373992604
 TrailRenderer:
   serializedVersion: 3

@@ -8,7 +8,9 @@ using System.Threading.Tasks;
 public class GameBehaviour : MonoBehaviour
 {
     public Rigidbody2D rb;
+
     bool isFrozen = false;
+
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     private Text Text1;
     private Text Text2;
@@ -19,6 +21,18 @@ public class GameBehaviour : MonoBehaviour
     private float targetTime;
     public int RedScore = 0;
     public int BlueScore = 0;
+
+    [Range(100f, 500f)] public float minSpeed = 300f; // Speed of the ball, can be adjusted in the inspector
+    [Range(100f, 500f)] public float maxSpeed = 500f; // Maximum speed of the ball, can be adjusted in the inspector
+
+    private enum LastWon
+    {
+        Red,
+        Blue,
+        None
+    }
+
+    private LastWon lastWon = LastWon.None;
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
@@ -34,7 +48,27 @@ public class GameBehaviour : MonoBehaviour
         TimerRound.fillAmount = 1.0f;
         targetTime = maxTimer;
         rb = GetComponent<Rigidbody2D>();
-        rb.linearVelocity = new Vector3(80,80,0);
+        rb.linearVelocity = GetStartingBallVelocity();
+    }
+
+    private Vector3 GetStartingBallVelocity()
+    {
+        // Let's choose a random angle between 30 and 60 degrees for the ball's initial velocity
+        float angle = Random.Range(30f, 60f) * Mathf.Deg2Rad; // Convert degrees to radians
+        float speed =
+            Random.Range(minSpeed, Mathf.Lerp(minSpeed, maxSpeed, 0.3f)); // Random speed between 300 and maxSpeed
+        float x = Mathf.Cos(angle) * speed;
+        float y = Mathf.Sin(angle) * speed;
+        Vector3 initialVelocity = new Vector3(x, y, 0);
+
+        return lastWon switch
+        {
+            LastWon.Red => new Vector3(-initialVelocity.x, initialVelocity.y, 0),
+            LastWon.Blue => new Vector3(initialVelocity.x, -initialVelocity.y, 0),
+            _ => Random.value < 0.5f
+                ? new Vector3(initialVelocity.x, initialVelocity.y, 0)
+                : new Vector3(-initialVelocity.x, -initialVelocity.y, 0)
+        };
     }
 
     // Update is called once per frame
@@ -50,20 +84,22 @@ public class GameBehaviour : MonoBehaviour
             float y = rb.linearVelocity.y;
             if (x < 0)
             {
-                x = Mathf.Clamp(x, -500, -50);
+                x = Mathf.Clamp(x, -maxSpeed, -minSpeed);
             }
             else
             {
-                x = Mathf.Clamp(x, 50, 500);
+                x = Mathf.Clamp(x, minSpeed, maxSpeed);
             }
+
             if (y < 0)
             {
-                y = Mathf.Clamp(y, -500, -50);
+                y = Mathf.Clamp(y, -maxSpeed, -minSpeed);
             }
             else
             {
-                y = Mathf.Clamp(y, 50, 500);
+                y = Mathf.Clamp(y, minSpeed, maxSpeed);
             }
+
             rb.linearVelocity = new Vector3(x, y, 0);
         }
 
@@ -109,29 +145,30 @@ public class GameBehaviour : MonoBehaviour
         await Task.Delay(1000);
         Destroy(this.gameObject);
     }
-    
+
     async void OnTriggerEnter2D(Collider2D collider)
     {
         if (collider.gameObject.tag == "Right")
         {
-            transform.position = new Vector3(Screen.width/2,Screen.height/2,0);
+            transform.position = new Vector3(Screen.width / 2, Screen.height / 2, 0);
             isFrozen = true;
             BlueScore++;
             Text2.text = "" + BlueScore;
             await Task.Delay(1000);
             isFrozen = false;
-            rb.linearVelocity = new Vector3(80,80,0);
+            lastWon = LastWon.Blue;
+            rb.linearVelocity = GetStartingBallVelocity();
         }
         else if (collider.gameObject.tag == "Left")
         {
-            transform.position = new Vector3(Screen.width/2,Screen.height/2,0);
+            transform.position = new Vector3(Screen.width / 2, Screen.height / 2, 0);
             isFrozen = true;
             RedScore++;
             Text1.text = "" + RedScore;
             await Task.Delay(1000);
             isFrozen = false;
-            rb.linearVelocity = new Vector3(-80,-80,0);
-
+            lastWon = LastWon.Red;
+            rb.linearVelocity = GetStartingBallVelocity();
         }
     }
 }
