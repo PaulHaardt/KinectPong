@@ -324,6 +324,16 @@ namespace Sripts
         
         private void UpdateHandHistory()
         {
+            if (leftHandPos.x > terrainLimit)
+            {
+                leftHandPos.x = leftHandHistory[(historyIndex + averageFrames - 1) % averageFrames].x;
+            }
+            
+            if (rightHandPos.x < 1 - terrainLimit)
+            {
+                rightHandPos.x = rightHandHistory[(historyIndex + averageFrames - 1) % averageFrames].x;
+            }
+
             leftHandHistory[historyIndex] = leftHandPos;
             rightHandHistory[historyIndex] = rightHandPos;
         
@@ -384,9 +394,8 @@ namespace Sripts
                 float normalizedY = Mathf.Clamp01(smoothedLeftPos.y);
                 leftPos.y = Mathf.Lerp(yClampMin, yClampMax, normalizedY);
 
-                float normalizedX = Mathf.Clamp(smoothedLeftPos.x, 0f, terrainLimit);
+                float normalizedX = Mathf.Clamp01(smoothedLeftPos.x);
                 leftPos.x = Mathf.Lerp(xClampMin, xClampMax, normalizedX) * xMovementScale;
-                leftPos.x = Mathf.Clamp(leftPos.x, xClampMin, leftLimit.position.x);
         
                 leftPaddle.position = leftPos;
             }
@@ -397,10 +406,9 @@ namespace Sripts
         
                 float normalizedY = Mathf.Clamp01(smoothedRightPos.y);
                 rightPos.y = Mathf.Lerp(yClampMin, yClampMax, normalizedY);
-        
-                float normalizedX = Mathf.Clamp(smoothedRightPos.x, 1f - terrainLimit, 1f);
+                
+                float normalizedX = Mathf.Clamp01(smoothedRightPos.x);
                 rightPos.x = Mathf.Lerp(xClampMin, xClampMax, normalizedX) * xMovementScale;
-                rightPos.x = Mathf.Clamp(rightPos.x, rightLimit.position.x, xClampMax);
         
                 rightPaddle.position = rightPos;
             }

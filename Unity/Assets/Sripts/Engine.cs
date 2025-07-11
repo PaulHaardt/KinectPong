@@ -11,9 +11,10 @@ public class Engine : MonoBehaviour
     public GameObject paddlesRight;
     public GameObject Warning;
     public KinectHandTracker KinectHandTracker;
+    private GameObject instantiatedBall;
     public void ClickStart()
     {
-        Instantiate(ball, Canvas.transform);
+        instantiatedBall = Instantiate(ball, Canvas.transform);
         GameObject.FindGameObjectWithTag("Restart").transform.position += new Vector3(0, -50000, 0);
         GameObject.FindGameObjectWithTag("Calibrate").transform.position += new Vector3(0, -50000, 0);
     }
@@ -41,5 +42,20 @@ public class Engine : MonoBehaviour
 
         GameObject.FindGameObjectWithTag("Restart").transform.position += new Vector3(0, 50000, 0);
         GameObject.FindGameObjectWithTag("Calibrate").transform.position += new Vector3(0, 50000, 0);
+    }
+
+    public void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.Space) && !instantiatedBall)
+        {
+            ClickStart();
+            Debug.Log("Ball instantiated");
+        }
+        
+        if (Input.GetKeyDown(KeyCode.C))
+        {
+            ClickCalibrate();
+            Debug.Log("Calibration started");
+        }
     }
 }

@@ -689,7 +689,7 @@ MonoBehaviour:
   rawJSONLogger: {fileID: 363324648}
   xMovementScale: 1
   smoothingFactor: 0.9
-  averageFrames: 7
+  averageFrames: 15
   coordArtefactPrefab: {fileID: 7052415209549229078, guid: cbf795a426809744fad806a056b571a6, type: 3}
 --- !u!1 &522455290
 GameObject:
@@ -1301,7 +1301,7 @@ BoxCollider2D:
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
-  m_Offset: {x: 0, y: -15}
+  m_Offset: {x: 0, y: 15}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0, y: 0}
