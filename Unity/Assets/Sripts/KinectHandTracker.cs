@@ -137,11 +137,11 @@ namespace Sripts
                 }
                 else if (line.StartsWith("UDP_SERVER_WSL="))
                 {
-                    serverIP = line.Substring("UDP_SERVER_WSL=".Length);
+                    serverIP = line.Substring("UDP_IP_WSL=".Length);
                 }
-                else if (line.StartsWith("UDP_SERVER_UBUNTU="))
+                else if (line.StartsWith("UDP_IP_UBUNTU="))
                 {
-                    serverIP = line.Substring("UDP_SERVER_UBUNTU=".Length);
+                    serverIP = line.Substring("UDP_IP_UBUNTU=".Length);
                 }
             });
         }
