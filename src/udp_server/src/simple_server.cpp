@@ -522,14 +522,53 @@ private:
         //     0,
         //     1);
 
-        result.hands.emplace_back(
-            std::sin(counter) * 0.5f + 0.5f,
-            std::cos(counter) * 0.5f + 0.5f,
-            0, 0);
-        result.hands.emplace_back(
-            1 - (std::sin(counter) * 0.5f + 0.5f),
-            1 - (std::cos(counter) * 0.5f + 0.5f),
-            0, 1);
+        // First hand moves along the perimeter
+        float t1 = counter * 0.5f;
+        float x1, y1;
+        
+        if (t1 <= 1.0f) {
+            // Top edge: left to right
+            x1 = t1;
+            y1 = 0.0f;
+        } else if (t1 <= 2.0f) {
+            // Right edge: top to bottom
+            x1 = 1.0f;
+            y1 = t1 - 1.0f;
+        } else if (t1 <= 3.0f) {
+            // Bottom edge: right to left
+            x1 = 3.0f - t1;
+            y1 = 1.0f;
+        } else {
+            // Left edge: bottom to top
+            x1 = 0.0f;
+            y1 = 4.0f - t1;
+            if (t1 > 4.0f) {
+            counter -= 8.0f; // Reset counter to loop
+            }
+        }
+        
+        // Second hand moves in the opposite direction
+        float t2 = counter * 0.5f + 4.0f; // Offset by half the path
+        float x2, y2;
+        
+        if (t2 > 8.0f) t2 -= 8.0f; // Keep in range
+        
+        if (t2 <= 1.0f) {
+            x2 = t2;
+            y2 = 0.0f;
+        } else if (t2 <= 2.0f) {
+            x2 = 1.0f;
+            y2 = t2 - 1.0f;
+        } else if (t2 <= 3.0f) {
+            x2 = 3.0f - t2;
+            y2 = 1.0f;
+        } else {
+            x2 = 0.0f;
+            y2 = 4.0f - t2;
+        }
+        
+        result.hands.emplace_back(x1, y1, 0, 0);
+        result.hands.emplace_back(x2, y2, 0, 1);
 
         // Dummy objects
         result.objects.emplace_back(0.2f, 0.5f, 0.85f, 1);
