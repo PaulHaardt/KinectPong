@@ -144,7 +144,10 @@ public:
         float z = 0; // You could get depth value here if needed
         int id = id_list[i - 1];
         std::cout << x << " " << y << " " << z << " " << id << std::endl;
-        hands.push_back(SimpleDetectedObject(x, 1 - y, z, id));
+        if (x < 0.03 || x > 0.97 || y < 0.03 || y > 0.97) {
+          continue; // Skip if out of bounds
+        }
+        hands.push_back(SimpleDetectedObject(x, y, z, id));
       }
     }
 
