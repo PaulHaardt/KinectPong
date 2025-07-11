@@ -553,26 +553,32 @@ private:
         //     0,
         //     1);
 
-        // Generate a random value between -range and +range
-        auto randomOffset = [](float range) -> float {
-            return ((float)rand() / RAND_MAX * 2.0f - 1.0f) * range;
-        };
+        // Fixed position hands
+        float leftHandX = 0.1f;
+        float leftHandY = 0.5f;
+        float rightHandX = 0.9f;
+        float rightHandY = 0.5f;
 
-        // Create a smooth up and down motion using sin function
-        float yTrajectory = 0.5f + 0.3f * std::sin(counter);
-        
-        // Noise factor (20%)
-        const float noiseFactor = 0.2f;
+        // Add occasional noise (every ~2 seconds)
+        static int noiseCounter = 0;
+        noiseCounter++;
+        bool addNoise = (noiseCounter % 60 < 10);
 
-        // Left hand with trajectory + noise
-        float leftHandX = 0.1f + randomOffset(0.1f);  // Random within 0-20% of width
-        float leftHandY = (1.0f - noiseFactor) * yTrajectory + noiseFactor * (0.5f + randomOffset(0.2f));
-        result.hands.emplace_back(leftHandX, leftHandY, 0, 0);
+        if (addNoise) {
+            // Add significant random noise
+            leftHandX += (rand() % 100 - 50) / 500.0f;
+            leftHandY += (rand() % 100 - 50) / 500.0f;
+            rightHandX += (rand() % 100 - 50) / 500.0f;
+            rightHandY += (rand() % 100 - 50) / 500.0f;
+            
+            // Reset counter after a few noisy frames
+            if (noiseCounter > 65) noiseCounter = 0;
+        }
 
-        // Right hand with trajectory + noise
-        float rightHandX = 0.9f + randomOffset(0.1f);  // Random within 80-100% of width
-        float rightHandY = (1.0f - noiseFactor) * yTrajectory + noiseFactor * (0.5f + randomOffset(0.2f));
-        result.hands.emplace_back(rightHandX, rightHandY, 0, 1);
+        // Add the hands to the result
+        result.hands.emplace_back(leftHandX, leftHandY, 0.85f, 0);
+        result.hands.emplace_back(rightHandX, rightHandY, 0.85f, 1);
+
 
         // Dummy objects
         result.objects.emplace_back(0.2f, 0.5f, 0.85f, 1);

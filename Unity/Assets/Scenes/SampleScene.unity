@@ -470,7 +470,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &363324648
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -688,8 +688,8 @@ MonoBehaviour:
   RightCoordinateLogger: {fileID: 856981296}
   rawJSONLogger: {fileID: 363324648}
   xMovementScale: 1
-  smoothingFactor: 0.9
-  averageFrames: 15
+  smoothingFactor: 0.8
+  averageFrames: 30
   coordArtefactPrefab: {fileID: 7052415209549229078, guid: cbf795a426809744fad806a056b571a6, type: 3}
 --- !u!1 &522455290
 GameObject:
@@ -1044,7 +1044,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &856981294
 RectTransform:
   m_ObjectHideFlags: 0
@@ -2286,7 +2286,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1907055548
 RectTransform:
   m_ObjectHideFlags: 0
@@ -2563,7 +2563,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 2147483647
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &2021534424
 RectTransform:
   m_ObjectHideFlags: 0
