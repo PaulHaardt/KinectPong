@@ -44,10 +44,13 @@ namespace Sripts
     
         [Header("Smoothing")]
         public float smoothingFactor = 0.8f;
-        [Range(1, 20), Tooltip("Average Frames")] public int averageFrames = 5;
+        [Range(1, 50), Tooltip("Average Frames")] public int averageFrames = 5;
         private UdpClient udpClient;
         private Thread udpThread;
         private bool isReceiving = false;
+        
+        [Header("Coords Artefact")]
+        public GameObject coordArtefactPrefab;
     
         // Hand coordinate data
         private Vector2 leftHandPos;
@@ -138,10 +141,12 @@ namespace Sripts
                 else if (line.StartsWith("UDP_SERVER_WSL="))
                 {
                     serverIP = line.Substring("UDP_IP_WSL=".Length);
+                    Debug.Log($"Using WSL server IP: {serverIP}");
                 }
                 else if (line.StartsWith("UDP_IP_UBUNTU="))
                 {
                     serverIP = line.Substring("UDP_IP_UBUNTU=".Length);
+                    Debug.Log($"Using Ubuntu server IP: {serverIP}");
                 }
             });
         }
@@ -170,7 +175,7 @@ namespace Sripts
                 udpThread.Start();
             
                 Debug.Log($"UDP Client started on local port {clientPort}, connecting to server {serverIP}:{serverPort}");
-                File.AppendAllText("log.txt", $"[{DateTime.Now}] UDP Client started on local port {clientPort}, connecting to server {serverIP}:{serverPort}\n");
+                // File.AppendAllText("log.txt", $"[{DateTime.Now}] UDP Client started on local port {clientPort}, connecting to server {serverIP}:{serverPort}\n");
             }
             catch (Exception e)
             {
@@ -178,6 +183,27 @@ namespace Sripts
             }
         }
 
+        public void SendUDPMessage(string message)
+        {
+            if (udpClient == null || !isReceiving)
+            {
+                Debug.LogError("UDP client is not initialized or not receiving data.");
+                return;
+            }
+
+            try
+            {
+                byte[] data = Encoding.UTF8.GetBytes(message);
+                IPEndPoint serverEndPoint = new IPEndPoint(IPAddress.Parse(serverIP), serverPort);
+                udpClient.Send(data, data.Length, serverEndPoint);
+                Debug.Log($"Sent message to {serverIP}:{serverPort} - {message}");
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"Failed to send message: {e.Message}");
+            }
+        }
+        
         private void UDPListener()
         {
             IPAddress serverAddress;
@@ -198,19 +224,8 @@ namespace Sripts
                 File.WriteAllText("log.txt", $"[{DateTime.Now}] Log file created.\n");
             }
             File.AppendAllText("log.txt", $"[{DateTime.Now}] UDP Client started on local port {clientPort}, connecting to server {serverIP}:{serverPort}\n");
-
-            // Send SUBSCRIBE message to server
-            try
-            {
-                byte[] subscribeMessage = Encoding.UTF8.GetBytes("SUBSCRIBE");
-                udpClient.Send(subscribeMessage, subscribeMessage.Length, serverEndPoint);
-                Debug.Log("SUBSCRIBE message sent to server");
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"Failed to send SUBSCRIBE message: {e.Message}");
-                return;
-            }
+            
+            SendUDPMessage("SUBSCRIBE");
 
             string jsonString = string.Empty;
             while (isReceiving)
@@ -277,6 +292,7 @@ namespace Sripts
                 UpdateHandHistory();
                 ApplySmoothing();
                 MovePaddles();
+                SpawnCoordArtefacts();
             }
         }
 
@@ -314,10 +330,6 @@ namespace Sripts
 
         private void ApplySmoothing()
         {
-            // Exponential smoothing
-            smoothedLeftPos = Vector2.Lerp(smoothedLeftPos, leftHandPos, 1.0f - smoothingFactor);
-            smoothedRightPos = Vector2.Lerp(smoothedRightPos, rightHandPos, 1.0f - smoothingFactor);
-        
             // Temporal median smoothing (efficient selection)
             Vector2[] leftHistoryCopy = new Vector2[averageFrames];
             Vector2[] rightHistoryCopy = new Vector2[averageFrames];
@@ -389,6 +401,17 @@ namespace Sripts
                 rightPos.x = Mathf.Clamp(rightPos.x, rightLimit.position.x, xClampMax);
         
                 rightPaddle.position = rightPos;
+            }
+        }
+        
+        private void SpawnCoordArtefacts()
+        {
+            if (leftPaddle)
+            {
+                Vector3 leftPos = leftPaddle.position;
+                    GameObject leftArtefact = Instantiate(coordArtefactPrefab, leftPos, Quaternion.identity);
+                    leftArtefact.transform.SetParent(canvasRect, true);
+                    leftArtefact.transform.SetSiblingIndex(0);
             }
         }
 

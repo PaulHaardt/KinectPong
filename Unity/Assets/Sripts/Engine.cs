@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using System.Threading.Tasks;
+using Sripts;
 
 public class Engine : MonoBehaviour
 {
@@ -9,6 +10,7 @@ public class Engine : MonoBehaviour
     public GameObject paddlesLeft;
     public GameObject paddlesRight;
     public GameObject Warning;
+    public KinectHandTracker KinectHandTracker;
     public void ClickStart()
     {
         Instantiate(ball, Canvas.transform);
@@ -16,7 +18,7 @@ public class Engine : MonoBehaviour
         GameObject.FindGameObjectWithTag("Calibrate").transform.position += new Vector3(0, -50000, 0);
     }
 
-    async public void ClickCalibrate()
+    public async void ClickCalibrate()
     {
         paddlesLeft.SetActive(false);
         paddlesRight.SetActive(false);
@@ -25,14 +27,12 @@ public class Engine : MonoBehaviour
         GameObject.FindGameObjectWithTag("Calibrate").transform.position += new Vector3(0, -50000, 0);
 
         Warning.SetActive(true);
+        
+        await Task.Delay(3000);
+        
+        KinectHandTracker.SendUDPMessage("DEPTH_CALIBRATION");
 
         await Task.Delay(10000);
-
-        //while (true)
-        {
-            
-        }
-        // Do your things
 
         paddlesLeft.SetActive(true);
         paddlesRight.SetActive(true);
