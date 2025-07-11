@@ -25,6 +25,8 @@ namespace Sripts
         [Header("Limits")]
         public RectTransform leftLimit;
         public RectTransform rightLimit;
+        [Range(0f, 1f), Tooltip("Terrain limit for paddle movement (0 = left, 1 = right)")]
+        public float terrainLimit = 0.25f; // Default to 0.5 (middle of the terrain)
         
         public RectTransform blueText;
         public RectTransform redText;
@@ -381,8 +383,8 @@ namespace Sripts
                 
                 float normalizedY = Mathf.Clamp01(smoothedLeftPos.y);
                 leftPos.y = Mathf.Lerp(yClampMin, yClampMax, normalizedY);
-        
-                float normalizedX = Mathf.Clamp01(smoothedLeftPos.x);
+
+                float normalizedX = Mathf.Clamp(smoothedLeftPos.x, 0f, terrainLimit);
                 leftPos.x = Mathf.Lerp(xClampMin, xClampMax, normalizedX) * xMovementScale;
                 leftPos.x = Mathf.Clamp(leftPos.x, xClampMin, leftLimit.position.x);
         
@@ -396,7 +398,7 @@ namespace Sripts
                 float normalizedY = Mathf.Clamp01(smoothedRightPos.y);
                 rightPos.y = Mathf.Lerp(yClampMin, yClampMax, normalizedY);
         
-                float normalizedX = Mathf.Clamp01(smoothedRightPos.x);
+                float normalizedX = Mathf.Clamp(smoothedRightPos.x, 1f - terrainLimit, 1f);
                 rightPos.x = Mathf.Lerp(xClampMin, xClampMax, normalizedX) * xMovementScale;
                 rightPos.x = Mathf.Clamp(rightPos.x, rightLimit.position.x, xClampMax);
         
@@ -412,8 +414,8 @@ namespace Sripts
                     leftHandPos.x * canvasRect.rect.width,
                     leftHandPos.y * canvasRect.rect.height
                 );
-                
-                    GameObject leftArtefact = Instantiate(coordArtefactPrefab, pos, Quaternion.identity);
+
+                GameObject leftArtefact = Instantiate(coordArtefactPrefab, pos, Quaternion.identity);
                     leftArtefact.transform.SetParent(canvasRect, true);
                     leftArtefact.transform.SetSiblingIndex(0);
             }

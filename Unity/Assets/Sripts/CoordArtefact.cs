@@ -20,7 +20,7 @@ public class CoordArtefact : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        if (image.color.a == 0)
+        if (image.color.a <= 0)
         {
             Destroy(gameObject);
         }
