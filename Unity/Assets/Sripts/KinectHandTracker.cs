@@ -294,7 +294,7 @@ namespace Sripts
                 UpdateHandHistory();
                 ApplySmoothing();
                 MovePaddles();
-                SpawnCoordArtefacts();
+                // SpawnCoordArtefacts();
             }
         }
 
