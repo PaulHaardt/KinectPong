@@ -281,6 +281,32 @@ public:
 
         // Process with detection
         SimpleDetectionResult result = processFrames(rgb_clone, depth_clone, our_timestamp);
+        auto hands = result.first;
+
+        // Map to store the hand with lowest depth for each ID
+        std::map<int, SimpleDetectedObject> lowest_depth_hands;
+
+        // Iterate through all detected hands
+        for (const auto& hand : hands) {
+            int pixel_x = static_cast<int>(hand.x * 640);
+            int pixel_y = static_cast<int>(hand.y * 480);
+    
+            // Get depth value at hand position
+            uint16_t depth_value = depth[pixel_y * depth_width + pixel_x];
+    
+            // Check if this is the first hand with this ID or has lower depth
+            auto it = lowest_depth_hands.find(hand.id);
+            if (it == lowest_depth_hands.end() || depth_value < depth[static_cast<int>(it->second.y) * depth_width + static_cast<int>(it->second.x)]) {
+                lowest_depth_hands[hand.id] = hand;
+            }
+        }
+
+        std::vector<SimpleDetectedObject> filtered_hands;
+        for (const auto& pair : lowest_depth_hands) {
+            filtered_hands.push_back(pair.second);
+        }
+
+        result = {filtered_hands, result.second};
 
         // Broadcast to client
         if (has_client_)
