@@ -66,21 +66,10 @@ public:
         imgGray.convertTo(depth8, CV_8UC1, 255.0 / (maxVal - minVal),
                           -minVal * 255.0 / (maxVal - minVal));
         cv::equalizeHist(depth8, depthEq);
-        // cv::medianBlur(depthEq, depthEq, 4);
         cv::inRange(depthEq, low_threshold, high_threshold, mask);
 
-        // Compute background using a large morphological opening
-        cv::Mat background;
-        cv::Mat large_kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(50, 50));
-        cv::morphologyEx(mask, background, cv::MORPH_OPEN, large_kernel);
-
-        // Remove background from mask
-        cv::Mat foreground;
-        cv::subtract(mask, background, foreground);
-
-        // Clean up foreground mask
         cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(20, 20));
-        cv::morphologyEx(foreground, mask, cv::MORPH_CLOSE, kernel);
+        cv::morphologyEx(mask, mask, cv::MORPH_CLOSE, kernel);
         cv::morphologyEx(mask, mask, cv::MORPH_OPEN, kernel);
 
         cv::Mat labels, stats, centroids;
@@ -152,33 +141,30 @@ public:
                 cv::Scalar color = cv::Scalar(0, 255, 0);
 
                 // Apply homography to farthest_point
-                std::cout << farthest_point << std::endl;
                 std::vector<cv::Point2f> input_pts = {cv::Point2f(farthest_point.x, farthest_point.y)};
                 std::vector<cv::Point2f> output_pts;
                 cv::perspectiveTransform(input_pts, output_pts, homography);
-                std::cout << "Transformed point: " << output_pts[0] << std::endl;
+
                 cv::Point2f transformed_point = output_pts[0];
                 cv::circle(visualization, output_pts[0], 8, color, -1);
 
-                cv::Mat pt = (cv::Mat_<double>(3, 1) << farthest_point.x / input_width,
-                              1 - farthest_point.y / input_height, 1.0);
+                cv::Mat pt = (cv::Mat_<double>(3, 1) << output_pts[0].x / input_width,
+                              1 - output_pts[0].y / input_height, 1.0);
                 float x = pt.at<double>(0, 0) / pt.at<double>(2, 0);
                 float y = pt.at<double>(1, 0) / pt.at<double>(2, 0);
                 float z = 0;// You could get depth value here if needed
+                if (x < 0.03 || x > 0.97 || y < 0.03 || y > 0.97) {
+                    continue;// Skip points too close to the border
+                }
                 int id = id_list[i - 1];
 
-                cv::Point2f input(x, y);
-                cv::Point2f output;
-
-                cv::perspectiveTransform(std::vector<cv::Point2f>{input}, std::vector<cv::Point2f>{output}, homography);
-
-                hands.push_back(SimpleDetectedObject(output.x, output.y, z, id));
+                hands.push_back(SimpleDetectedObject(x, y, z, id));
             }
         }
 
         cv::imshow("RGB", rgb);
         cv::imshow("Processed", visualization);
-        cv::imshow("Depth", foreground);
+        cv::imshow("Depth", depthEq);
         cv::waitKey(1);
 
         return {hands, objects};

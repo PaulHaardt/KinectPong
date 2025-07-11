@@ -356,10 +356,28 @@ namespace Sripts
             Vector2 leftMedian = new Vector2(Median(leftX), Median(leftY));
             Vector2 rightMedian = new Vector2(Median(rightX), Median(rightY));
 
+            // Weighted average calculation
+            float leftWeightedX = WeightedAverage(leftX);
+            float leftWeightedY = WeightedAverage(leftY);
+            float rightWeightedX = WeightedAverage(rightX);
+            float rightWeightedY = WeightedAverage(rightY);
+        
+            float threshold = 1.2f; // Example threshold, adjust as needed
+        
+            // Clamp latest value if above weighted average * threshold
+            int latestIdx = (historyIndex + averageFrames - 1) % averageFrames;
+            if (leftHandHistory[latestIdx].x > leftWeightedX * threshold)
+                leftHandHistory[latestIdx].x = leftWeightedX * threshold;
+            if (leftHandHistory[latestIdx].y > leftWeightedY * threshold)
+                leftHandHistory[latestIdx].y = leftWeightedY * threshold;
+            if (rightHandHistory[latestIdx].x > rightWeightedX * threshold)
+                rightHandHistory[latestIdx].x = rightWeightedX * threshold;
+            if (rightHandHistory[latestIdx].y > rightWeightedY * threshold)
+                rightHandHistory[latestIdx].y = rightWeightedY * threshold;
+        
             // Combine both smoothing methods
             smoothedLeftPos = Vector2.Lerp(smoothedLeftPos, leftMedian, smoothingFactor);
             smoothedRightPos = Vector2.Lerp(smoothedRightPos, rightMedian, smoothingFactor);
-            return;
 
             float Median(float[] arr)
             {
@@ -367,6 +385,19 @@ namespace Sripts
                 Array.Sort(arr);
                 if (n % 2 == 1) return arr[n / 2];
                 return (arr[(n / 2) - 1] + arr[n / 2]) / 2f;
+            }
+        
+            float WeightedAverage(float[] arr)
+            {
+                float sum = 0f;
+                float weightSum = 0f;
+                for (int i = 0; i < arr.Length; i++)
+                {
+                    float weight = i + 1; // More recent values have higher weight
+                    sum += arr[i] * weight;
+                    weightSum += weight;
+                }
+                return sum / weightSum;
             }
         }
 
@@ -395,6 +426,7 @@ namespace Sripts
                 leftPos.y = Mathf.Lerp(yClampMin, yClampMax, normalizedY);
 
                 float normalizedX = Mathf.Clamp01(smoothedLeftPos.x);
+                normalizedX = Mathf.Clamp(normalizedX, 0f, 1f - terrainLimit);
                 leftPos.x = Mathf.Lerp(xClampMin, xClampMax, normalizedX) * xMovementScale;
         
                 leftPaddle.position = leftPos;
@@ -408,6 +440,7 @@ namespace Sripts
                 rightPos.y = Mathf.Lerp(yClampMin, yClampMax, normalizedY);
                 
                 float normalizedX = Mathf.Clamp01(smoothedRightPos.x);
+                normalizedX = Mathf.Clamp(normalizedX, terrainLimit, 1f);
                 rightPos.x = Mathf.Lerp(xClampMin, xClampMax, normalizedX) * xMovementScale;
         
                 rightPaddle.position = rightPos;
