@@ -104,8 +104,8 @@ public class GameBehaviour : MonoBehaviour
         Text2.text = "";
         Timer.text = "";
 
-        GameObject.FindGameObjectWithTag("Restart").transform.position += new Vector3(0, 220, 0);
-        GameObject.FindGameObjectWithTag("Calibrate").transform.position += new Vector3(0, 220, 0);
+        GameObject.FindGameObjectWithTag("Restart").transform.position += new Vector3(0, 50000, 0);
+        GameObject.FindGameObjectWithTag("Calibrate").transform.position += new Vector3(0, 50000, 0);
         await Task.Delay(1000);
         Destroy(this.gameObject);
     }

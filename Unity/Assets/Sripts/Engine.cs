@@ -12,8 +12,8 @@ public class Engine : MonoBehaviour
     public void ClickStart()
     {
         Instantiate(ball, Canvas.transform);
-        GameObject.FindGameObjectWithTag("Restart").transform.position += new Vector3(0, -220, 0);
-        GameObject.FindGameObjectWithTag("Calibrate").transform.position += new Vector3(0, -220, 0);
+        GameObject.FindGameObjectWithTag("Restart").transform.position += new Vector3(0, -50000, 0);
+        GameObject.FindGameObjectWithTag("Calibrate").transform.position += new Vector3(0, -50000, 0);
     }
 
     async public void ClickCalibrate()
@@ -21,8 +21,8 @@ public class Engine : MonoBehaviour
         paddlesLeft.SetActive(false);
         paddlesRight.SetActive(false);
 
-        GameObject.FindGameObjectWithTag("Restart").transform.position += new Vector3(0, -220, 0);
-        GameObject.FindGameObjectWithTag("Calibrate").transform.position += new Vector3(0, -220, 0);
+        GameObject.FindGameObjectWithTag("Restart").transform.position += new Vector3(0, -50000, 0);
+        GameObject.FindGameObjectWithTag("Calibrate").transform.position += new Vector3(0, -50000, 0);
 
         Warning.SetActive(true);
 
@@ -39,7 +39,7 @@ public class Engine : MonoBehaviour
 
         Warning.SetActive(false);
 
-        GameObject.FindGameObjectWithTag("Restart").transform.position += new Vector3(0, 220, 0);
-        GameObject.FindGameObjectWithTag("Calibrate").transform.position += new Vector3(0, 220, 0);
+        GameObject.FindGameObjectWithTag("Restart").transform.position += new Vector3(0, 50000, 0);
+        GameObject.FindGameObjectWithTag("Calibrate").transform.position += new Vector3(0, 50000, 0);
     }
 }
